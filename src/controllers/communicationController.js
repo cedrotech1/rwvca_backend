@@ -7,6 +7,7 @@ import { createLog } from "../services/logService.js";
 import { createNotification } from "../services/notificationService.js";
 import { buildEmailPayload } from "../services/emailNotificationHelpers.js";
 import fileStorage from "../utils/fileStorage.js";
+import { toPlainText } from "../utils/plainText.js";
 
 const { saveRequestFile } = fileStorage;
 
@@ -50,10 +51,7 @@ function buildReplyTree(rows, parentId = 0, level = 0) {
 }
 
 function stripHtml(value) {
-  return String(value || "")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return toPlainText(value);
 }
 
 async function loadCommunication(id) {
@@ -169,7 +167,9 @@ export const getCommunication = asyncHandler(async (req, res) => {
 });
 
 export const createCommunication = asyncHandler(async (req, res) => {
-  const { title, description, users } = req.body || {};
+  const title = toPlainText(req.body?.title);
+  const description = toPlainText(req.body?.description);
+  const users = req.body?.users;
   if (!title || !description || !users) {
     return fail(res, "title, description, and users are required");
   }
@@ -234,7 +234,7 @@ export const addCommunicationReply = asyncHandler(async (req, res) => {
   const parent = await db.Communications.findByPk(req.params.id);
   if (!parent) return fail(res, "Communication not found", 404);
   if (!canAccess(req.user, parent)) return fail(res, "Access denied", 403);
-  const reply_text = String(req.body.reply_text || req.body.message || "").trim();
+  const reply_text = toPlainText(req.body.reply_text || req.body.message);
   if (!reply_text) return fail(res, "reply_text is required");
   const parent_reply_id = Number(req.body.parent_reply_id || 0) || null;
   const reply = await db.CommunicationReplies.create({

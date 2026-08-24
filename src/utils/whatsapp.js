@@ -1,4 +1,5 @@
 import axios from "axios";
+import { toPlainText } from "./plainText.js";
 
 const DEFAULT_API_URL = "https://wasenderapi.com/api/send-message";
 
@@ -67,12 +68,12 @@ export function buildWhatsAppText({
   emailPayload,
 }) {
   const payload = emailPayload || {};
-  const summary = truncate(payload.intro || message || title, 180);
+  const summary = truncate(toPlainText(payload.intro || message || title), 180);
   const link = normalizeWhatsAppUrl(url);
   const lines = [];
 
-  if (userName) lines.push(`Hi ${userName},`);
-  if (title) lines.push(`*${truncate(title, 80)}*`);
+  if (userName) lines.push(`Hi ${toPlainText(userName)},`);
+  if (title) lines.push(`*${truncate(toPlainText(title), 80)}*`);
   if (summary) lines.push(summary);
 
   if (link) {

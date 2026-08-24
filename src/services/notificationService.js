@@ -1,5 +1,6 @@
 import db from "../database/models/index.js";
 import Email from "../utils/mailer.js";
+import { toPlainText } from "../utils/plainText.js";
 import {
   buildWhatsAppText,
   normalizeRwandaPhone,
@@ -170,18 +171,20 @@ export async function createNotification({
   whatsapp = true,
   emailPayload = null,
 }) {
-  if (!receiverId || !message) return null;
+  const cleanTitle = toPlainText(title) || null;
+  const cleanMessage = toPlainText(message);
+  if (!receiverId || !cleanMessage) return null;
 
   const storedLink = dashboardLink(link);
-  const subject = title || "RWVCA Notification";
-  const heading = title || "RWVCA Notification";
+  const subject = cleanTitle || "RWVCA Notification";
+  const heading = cleanTitle || "RWVCA Notification";
 
   try {
     const row = await db.Notifications.create({
       receiver_id: receiverId,
       type: type || NOTIFICATION_TYPES.GENERIC,
-      title: title || null,
-      message,
+      title: cleanTitle,
+      message: cleanMessage,
       link: storedLink,
       status: "unread",
       user_type: userType,
@@ -193,7 +196,7 @@ export async function createNotification({
       });
       notifyStaff(user, {
         subject,
-        message,
+        message: cleanMessage,
         link: storedLink,
         heading,
         emailPayload,

@@ -47,11 +47,24 @@ export function getSuggestedPrompts(audience) {
 const MARKDOWN_GUIDELINES = `- Always reply in Markdown (bold, lists, numbered steps). Do not wrap the whole reply in a code block.
 - Keep answers concise and scannable.`;
 
-export function buildAssistantSystemPrompt(user = {}, audience = "staff") {
+const NO_REPO_RULES = `
+CRITICAL OPERATING RULES (must follow every reply):
+- You are IGITI, a public-website FAQ assistant for RWVCA visitors. You are NOT a software engineer and NOT a coding agent.
+- This chat intentionally has NO code repository and NO codebase access. That is expected and complete for your job.
+- NEVER say you lack repository access, website code, CMS access, or that you need a repo clone.
+- NEVER ask the user to provide source code, clone a repository, set up an assistant, or configure Cursor.
+- NEVER talk about Cursor, APIs, backend setup, environment variables, or how chatbots are built.
+- Answer ONLY from the RWVCA knowledge pack below plus the public website navigation tips.
+- If a detail is missing from the knowledge pack, say what you do know and point the visitor to the Contact page or info@rwvca.org.rw — do not invent prices, unpublished events, or policies.
+`.trim();
+
+export function buildAssistantSystemPrompt(user = {}, audience = "staff", knowledgePack = "") {
   if (normalizeAudience(audience) === "public") {
     return `You are IGITI, the assistant for the public website of the Rwanda Wood Value Chain Association (RWVCA).
 
-Help website visitors with public information only. Answer questions about RWVCA, membership, programs, events, gallery, member products, platforms, and how to contact the association.
+Help website visitors with public information only. Answer questions about RWVCA, membership, programs, events (including any published promotion/test events listed below), gallery, member products, platforms, and how to contact the association.
+
+${NO_REPO_RULES}
 
 Public website topics:
 ${PUBLIC_TOPICS.map((topic) => `- ${topic}`).join("\n")}
@@ -63,7 +76,9 @@ Guidelines:
 - Do not invent prices, policies, or unpublished data.
 - Do not share passwords, API keys, or internal credentials.
 - If unsure, suggest using the Contact page or emailing info@rwvca.org.rw.
-${MARKDOWN_GUIDELINES}`;
+${MARKDOWN_GUIDELINES}
+
+${knowledgePack || "No live CMS snapshot was available; use the Who we are / Contact defaults from this prompt and direct visitors to the website pages."}`;
   }
 
   const role = user.role || "staff";
@@ -72,6 +87,11 @@ ${MARKDOWN_GUIDELINES}`;
   return `You are IGITI, the assistant for the Rwanda Wood Value Chain Association Management Information System (RWVCA MIS).
 
 Your job is to help staff navigate and use the MIS platform. Answer only questions related to RWVCA MIS workflows, menus, and features.
+
+CRITICAL OPERATING RULES:
+- You are a staff help assistant for the MIS UI. You are NOT a coding agent.
+- This session may have no repository. Never mention repository access or ask for source code.
+- Never discuss Cursor, APIs, or how you were configured.
 
 Platform modules:
 ${STAFF_MODULES.map((module) => `- ${module}`).join("\n")}
@@ -88,4 +108,17 @@ ${MARKDOWN_GUIDELINES}
 
 Current user: ${name}
 Current role: ${role}`;
+}
+
+export function buildFollowUpPrompt(message, audience = "staff") {
+  const trimmed = String(message || "").trim();
+  if (normalizeAudience(audience) !== "public") {
+    return trimmed;
+  }
+
+  return `Continue as IGITI, the RWVCA public website assistant.
+Remember: you already have the RWVCA knowledge pack from earlier in this conversation. Do not mention repositories, Cursor, or missing codebase access.
+Answer the visitor's question directly and accurately.
+
+Visitor question: ${trimmed}`;
 }

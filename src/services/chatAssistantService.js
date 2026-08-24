@@ -1,5 +1,10 @@
 import axios from "axios";
-import { buildAssistantSystemPrompt, normalizeAudience } from "../constants/chatAssistantPrompt.js";
+import {
+  buildAssistantSystemPrompt,
+  buildFollowUpPrompt,
+  normalizeAudience,
+} from "../constants/chatAssistantPrompt.js";
+import { buildPublicKnowledgePack } from "./chatAssistantKnowledge.js";
 
 const CURSOR_API_BASE = "https://api.cursor.com";
 const TERMINAL_STATUSES = new Set(["FINISHED", "ERROR", "CANCELLED", "EXPIRED"]);
@@ -62,6 +67,32 @@ async function waitForRun(client, agentId, runId) {
   throw new Error("The assistant took too long to respond. Please try again.");
 }
 
+function sanitizeAssistantReply(reply) {
+  const text = String(reply || "").trim();
+  if (!text) return "I could not generate a response. Please try again.";
+
+  const looksLikeRepoExcuse =
+    /without repository access|need.*(repo|repository|codebase|website code)|clone the repository|set up an assistant/i.test(
+      text
+    );
+
+  if (!looksLikeRepoExcuse) return text;
+
+  return [
+    "**RWVCA** is the **Rwanda Wood Value Chain Association** — a national association for stakeholders across Rwanda's wood value chain (forestry, processing, and trade).",
+    "",
+    "It focuses on collaboration, advocacy, membership support, training, market access, and sustainable development of the wood industry.",
+    "",
+    "You can explore more on the public website:",
+    "- **About Us** — who we are, mission, and vision",
+    "- **Membership** — categories and how to join",
+    "- **Programs** / **Events** — current activities",
+    "- **Contact** — email, phone, and office location",
+    "",
+    "Ask me anything else about membership, events, programs, or how to reach RWVCA.",
+  ].join("\n");
+}
+
 export function isChatAssistantEnabled() {
   if (process.env.CHAT_ASSISTANT_ENABLED === "0" || process.env.CHAT_ASSISTANT_ENABLED === "false") {
     return false;
@@ -85,11 +116,22 @@ export async function sendChatMessage({ message, agentId, user, audience = "staf
   let runId;
 
   if (!activeAgentId) {
-    const systemPrompt = buildAssistantSystemPrompt(user, mode);
+    let knowledgePack = "";
+    if (mode === "public") {
+      try {
+        knowledgePack = await buildPublicKnowledgePack();
+      } catch (error) {
+        console.warn("Chat assistant knowledge pack failed:", error.message);
+      }
+    }
+
+    const systemPrompt = buildAssistantSystemPrompt(user, mode, knowledgePack);
+    // Omit repos on purpose: public FAQ does not need a GitHub workspace.
+    // Knowledge is injected in the prompt so the agent can answer accurately.
     const { data } = await client.post("/v1/agents", {
       name: mode === "public" ? "IGITI Public" : "IGITI MIS",
       prompt: {
-        text: `${systemPrompt}\n\nUser question: ${trimmed}`,
+        text: `${systemPrompt}\n\nVisitor / user question: ${trimmed}`,
       },
       model: { id: model },
     });
@@ -98,7 +140,7 @@ export async function sendChatMessage({ message, agentId, user, audience = "staf
     runId = data.run?.id;
   } else {
     const { data } = await client.post(`/v1/agents/${activeAgentId}/runs`, {
-      prompt: { text: trimmed },
+      prompt: { text: buildFollowUpPrompt(trimmed, mode) },
     });
     runId = data.run?.id;
   }
@@ -110,7 +152,7 @@ export async function sendChatMessage({ message, agentId, user, audience = "staf
   const result = await waitForRun(client, activeAgentId, runId);
 
   return {
-    reply: result.reply,
+    reply: mode === "public" ? sanitizeAssistantReply(result.reply) : result.reply,
     agentId: activeAgentId,
     runId: result.runId,
   };

@@ -1,3 +1,5 @@
+import { toPlainText } from "../utils/plainText.js";
+
 function humanize(value) {
   if (value === undefined || value === null || value === "") return "—";
   return String(value)
@@ -249,11 +251,17 @@ const DETAIL_BUILDERS = {
 
 export function buildEmailPayload(module, record, { intro, note, actionRequired, actor, extras = {} } = {}) {
   const builder = DETAIL_BUILDERS[module];
-  const details = builder ? builder(record, { actor, ...extras }) : genericDetails(extras.details || []);
+  const details = (builder ? builder(record, { actor, ...extras }) : genericDetails(extras.details || []))
+    .map((row) => ({
+      ...row,
+      label: toPlainText(row.label),
+      value: toPlainText(row.value),
+    }))
+    .filter((row) => row.value);
   return {
-    intro: intro || "",
+    intro: toPlainText(intro),
     details,
-    note: note || "",
-    actionRequired: actionRequired || "",
+    note: toPlainText(note),
+    actionRequired: toPlainText(actionRequired),
   };
 }

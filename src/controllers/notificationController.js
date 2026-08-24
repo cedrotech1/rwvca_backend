@@ -3,6 +3,7 @@ import asyncHandler from "express-async-handler";
 import db from "../database/models/index.js";
 import { ok, fail } from "../utils/apiResponse.js";
 import { getPagination, paginationMeta } from "../utils/pagination.js";
+import { sanitizeNotificationRow } from "../utils/plainText.js";
 
 const Notifications = db.Notifications;
 
@@ -18,7 +19,10 @@ export const getNotifications = asyncHandler(async (req, res) => {
     offset,
   });
 
-  return ok(res, { items: rows, pagination: paginationMeta(count, page, limit) });
+  return ok(res, {
+    items: rows.map(sanitizeNotificationRow),
+    pagination: paginationMeta(count, page, limit),
+  });
 });
 
 export const unreadCount = asyncHandler(async (req, res) => {
@@ -34,7 +38,7 @@ export const markRead = asyncHandler(async (req, res) => {
   });
   if (!row) return fail(res, "Notification not found", 404);
   await row.update({ status: "read" });
-  return ok(res, row, "Marked as read");
+  return ok(res, sanitizeNotificationRow(row), "Marked as read");
 });
 
 export const markAllRead = asyncHandler(async (req, res) => {

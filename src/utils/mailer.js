@@ -91,18 +91,24 @@ class Email {
   }
 
   async renderTemplate(template, subject) {
+    const { toPlainText } = await import("./plainText.js");
     const payload = this.emailPayload || {};
+    const details = (payload.details || []).map((row) => ({
+      ...row,
+      label: toPlainText(row.label),
+      value: toPlainText(row.value),
+    }));
     return ejs.renderFile(path.join(__dirname, `./../views/email/${template}.ejs`), {
       firstname: this.firstname,
       password: this.password,
       email: this.email,
       url: this.url || null,
-      message: this.message,
-      heading: subject,
-      intro: payload.intro || "",
-      details: payload.details || [],
-      note: payload.note || "",
-      actionRequired: payload.actionRequired || "",
+      message: toPlainText(this.message),
+      heading: toPlainText(subject),
+      intro: toPlainText(payload.intro),
+      details,
+      note: toPlainText(payload.note),
+      actionRequired: toPlainText(payload.actionRequired),
     });
   }
 
