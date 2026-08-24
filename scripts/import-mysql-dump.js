@@ -5,10 +5,29 @@ const { Client } = require("pg");
 
 const SKIP_TABLES = new Set(["members_schema_migrations", "SequelizeMeta"]);
 const BATCH_SIZE = 200;
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
+
+const env = process.env.NODE_ENV || "development";
+const dbPrefix = env === "production" ? "PRO" : env === "uat" ? "UAT" : "DEV";
 
 const dumpPath =
   process.argv[2] ||
-  path.resolve(__dirname, "../../rwvca-platform-php/database.sql");
+  path.resolve(__dirname, "../rwvca_db.sql");
+
+function dbConfig() {
+  const host = process.env[`${dbPrefix}_DATABASE_HOST`];
+  const config = {
+    host,
+    port: process.env[`${dbPrefix}_DATABASE_PORT`],
+    user: process.env[`${dbPrefix}_DATABASE_USER`],
+    password: process.env[`${dbPrefix}_DATABASE_PASSWORD`],
+    database: process.env[`${dbPrefix}_DATABASE_NAME`],
+  };
+  if (host && !LOCAL_HOSTS.has(host)) {
+    config.ssl = { require: true, rejectUnauthorized: true };
+  }
+  return config;
+}
 
 function unescapeMysqlString(value) {
   let out = "";
@@ -159,12 +178,24 @@ function extractInserts(sql) {
     const tableStart = start + marker.length;
     const tableEnd = sql.indexOf("`", tableStart);
     const table = sql.slice(tableStart, tableEnd);
-    const valuesAt = sql.indexOf("VALUES", tableEnd);
+    let i = tableEnd + 1;
+    while (i < sql.length && /\s/.test(sql[i])) i += 1;
+
+    let dumpColumns = null;
+    if (sql[i] === "(") {
+      const close = sql.indexOf(")", i);
+      dumpColumns = [...sql.slice(i + 1, close).matchAll(/`([^`]+)`/g)].map(
+        (match) => match[1]
+      );
+      i = close + 1;
+    }
+
+    const valuesAt = sql.indexOf("VALUES", i);
     if (valuesAt === -1) break;
-    let i = valuesAt + 6;
+    i = valuesAt + 6;
     while (i < sql.length && /\s/.test(sql[i])) i += 1;
     const parsed = parseMysqlValues(sql, i);
-    inserts.push({ table, rows: parsed.rows });
+    inserts.push({ table, columns: dumpColumns, rows: parsed.rows });
     searchFrom = parsed.end;
   }
 
@@ -240,18 +271,14 @@ async function main() {
     throw new Error(`Dump file not found: ${dumpPath}`);
   }
 
+  const config = dbConfig();
   console.log("Reading", dumpPath);
+  console.log(`Importing into ${env} database ${config.database} @ ${config.host}`);
   const sql = fs.readFileSync(dumpPath, "utf8");
   const inserts = extractInserts(sql);
   console.log(`Found ${inserts.length} INSERT statements`);
 
-  const client = new Client({
-    host: process.env.DEV_DATABASE_HOST,
-    port: process.env.DEV_DATABASE_PORT,
-    user: process.env.DEV_DATABASE_USER,
-    password: process.env.DEV_DATABASE_PASSWORD,
-    database: process.env.DEV_DATABASE_NAME,
-  });
+  const client = new Client(config);
   await client.connect();
 
   try {
@@ -271,24 +298,39 @@ async function main() {
       console.log(`Truncated ${tables.length} tables`);
     }
 
+    const pgTables = new Set(tables);
     let total = 0;
     for (const insert of inserts) {
-      if (SKIP_TABLES.has(insert.table)) {
+      if (
+        SKIP_TABLES.has(insert.table) ||
+        insert.table.startsWith("v_") ||
+        !pgTables.has(insert.table)
+      ) {
         console.log(`Skipped ${insert.table}`);
         continue;
       }
-      const columns = await getColumns(client, insert.table);
+      const pgColumns = await getColumns(client, insert.table);
+      const pgSet = new Set(pgColumns);
+      const dumpColumns = insert.columns || pgColumns;
+      const keepIndexes = [];
+      const columns = [];
+      for (let i = 0; i < dumpColumns.length; i += 1) {
+        if (!pgSet.has(dumpColumns[i])) continue;
+        keepIndexes.push(i);
+        columns.push(dumpColumns[i]);
+      }
       if (!columns.length) {
-        throw new Error(`Table ${insert.table} does not exist in PostgreSQL`);
+        console.log(`Skipped ${insert.table} (no matching columns)`);
+        continue;
       }
 
       const rows = insert.rows.map((row, index) => {
-        if (row.length !== columns.length) {
+        if (row.length !== dumpColumns.length) {
           throw new Error(
-            `${insert.table} row ${index + 1}: expected ${columns.length} columns, got ${row.length}`
+            `${insert.table} row ${index + 1}: expected ${dumpColumns.length} columns, got ${row.length}`
           );
         }
-        return row;
+        return keepIndexes.map((colIndex) => row[colIndex]);
       });
 
       const count = await insertRows(client, insert.table, columns, rows);
@@ -298,7 +340,7 @@ async function main() {
 
     await resetSequences(client);
     await client.query("COMMIT");
-    console.log(`Done. Imported ${total} rows into ${process.env.DEV_DATABASE_NAME}.`);
+    console.log(`Done. Imported ${total} rows into ${config.database}.`);
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
