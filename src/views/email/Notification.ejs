@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title><%= typeof heading !== 'undefined' && heading ? heading : 'RWVCA Notification' %></title>
+  </head>
+  <body style="font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;line-height:1.6;color:#1f2937;max-width:640px;margin:0 auto;padding:20px;background:#f3f4f6;">
+    <div style="border:1px solid #d1d5db;border-radius:10px;overflow:hidden;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.06);">
+      <div style="background:linear-gradient(135deg,#00628b 0%,#1a5276 100%);color:#fff;padding:24px 20px;text-align:center;">
+        <h2 style="margin:0;font-size:20px;font-weight:600;"><%= typeof heading !== 'undefined' && heading ? heading : 'RWVCA Notification' %></h2>
+        <p style="margin:8px 0 0;font-size:13px;opacity:.92;">Rwanda Wood Value Chain Association · MIS Portal</p>
+      </div>
+
+      <div style="padding:28px 24px;">
+        <p style="margin:0 0 16px;font-size:15px;">Dear <strong><%= firstname || 'Colleague' %></strong>,</p>
+
+        <% if (typeof intro !== 'undefined' && intro) { %>
+        <p style="margin:0 0 18px;font-size:15px;color:#374151;"><%= intro %></p>
+        <% } else if (typeof message !== 'undefined' && message) { %>
+        <p style="margin:0 0 18px;font-size:15px;color:#374151;white-space:pre-wrap;"><%= message %></p>
+        <% } %>
+
+        <% if (typeof actionRequired !== 'undefined' && actionRequired) { %>
+        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px 16px;margin:0 0 18px;">
+          <p style="margin:0;font-size:14px;color:#1e40af;"><strong>Action required:</strong> <%= actionRequired %></p>
+        </div>
+        <% } %>
+
+        <% if (typeof details !== 'undefined' && details && details.length) { %>
+        <table style="width:100%;border-collapse:collapse;margin:0 0 20px;font-size:14px;">
+          <thead>
+            <tr>
+              <th colspan="2" style="text-align:left;background:#f8fafc;border:1px solid #e5e7eb;padding:10px 12px;color:#00628b;font-size:13px;text-transform:uppercase;letter-spacing:.04em;">Request details</th>
+            </tr>
+          </thead>
+          <tbody>
+            <% details.forEach(function(row, index) { %>
+            <tr style="background:<%= index % 2 === 0 ? '#ffffff' : '#f9fafb' %>;">
+              <td style="border:1px solid #e5e7eb;padding:10px 12px;width:38%;font-weight:600;color:#4b5563;vertical-align:top;"><%= row.label %></td>
+              <td style="border:1px solid #e5e7eb;padding:10px 12px;color:#111827;vertical-align:top;white-space:pre-wrap;"><%= row.value %></td>
+            </tr>
+            <% }); %>
+          </tbody>
+        </table>
+        <% } else if (typeof message !== 'undefined' && message && typeof intro !== 'undefined' && intro) { %>
+        <div style="background:#f8fafc;border-left:4px solid #00628b;padding:14px 16px;margin:0 0 18px;border-radius:0 6px 6px 0;white-space:pre-wrap;font-size:14px;color:#374151;">
+          <%= message %>
+        </div>
+        <% } %>
+
+        <% if (typeof note !== 'undefined' && note) { %>
+        <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:14px 16px;margin:0 0 20px;">
+          <p style="margin:0 0 4px;font-size:12px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:.04em;">Comment / reason</p>
+          <p style="margin:0;font-size:14px;color:#78350f;white-space:pre-wrap;"><%= note %></p>
+        </div>
+        <% } %>
+
+        <% if (typeof url !== 'undefined' && url) { %>
+        <p style="text-align:center;margin:26px 0 8px;">
+          <a href="<%= url %>" style="display:inline-block;padding:12px 24px;background-color:#00628b;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;font-size:14px;">Open in RWVCA Portal</a>
+        </p>
+        <p style="text-align:center;margin:0;font-size:12px;color:#6b7280;">Or copy this link: <%= url %></p>
+        <% } else { %>
+        <p style="margin:0;font-size:14px;color:#6b7280;">Please log in to the RWVCA portal for the full record and next steps.</p>
+        <% } %>
+      </div>
+
+      <div style="padding:18px 24px;border-top:1px solid #e5e7eb;background:#f9fafb;font-size:12px;color:#6b7280;text-align:center;">
+        <strong>RWVCA MIS</strong> · Automated notification · Please do not reply to this email.<br />
+        For assistance contact your HR office or system administrator.
+      </div>
+    </div>
+  </body>
+</html>

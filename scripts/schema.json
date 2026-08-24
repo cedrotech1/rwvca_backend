@@ -1,0 +1,338 @@
+[
+  {
+    "name": "ads",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `title` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `description` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `url` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `status` enum('active','inactive') COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'active',\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "asset_logs",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `asset_id` int NOT NULL,\r\n  `action` varchar(100) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `performed_by_user_id` int NOT NULL,\r\n  `assigned_to_user_id` int DEFAULT NULL,\r\n  `comment` text COLLATE utf8mb4_general_ci,\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "asset_types",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `name` varchar(100) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `description` text COLLATE utf8mb4_general_ci,\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "assets",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `name` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `asset_type_id` int DEFAULT NULL,\r\n  `description` text COLLATE utf8mb4_general_ci,\r\n  `serial_number` varchar(100) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `label_number` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `location` enum('office','user') COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'office',\r\n  `user_id` int DEFAULT NULL,\r\n  `status` enum('available','issued','returned','damaged') COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'available',\r\n  `issued_date` date DEFAULT NULL,\r\n  `returned_date` date DEFAULT NULL,\r\n  `condition_notes` text COLLATE utf8mb4_general_ci,\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  `revert_status` varchar(10) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'no',\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "attendance",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `title` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `description` text COLLATE utf8mb4_general_ci,\r\n  `type` varchar(100) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `location` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `attendance_date` datetime NOT NULL,\r\n  `created_by` int NOT NULL,\r\n  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  `status` enum('draft','active','cancelled','completed') COLLATE utf8mb4_general_ci DEFAULT 'active',\r\n  PRIMARY KEY (`id`),\r\n  KEY `created_by` (`created_by`)"
+  },
+  {
+    "name": "attendance_users",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `attendance_id` int NOT NULL,\r\n  `user_id` int NOT NULL,\r\n  `signed` int DEFAULT '0',\r\n  `responded_at` datetime DEFAULT NULL,\r\n  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`),\r\n  UNIQUE KEY `unique_pair` (`attendance_id`,`user_id`),\r\n  KEY `user_id` (`user_id`)"
+  },
+  {
+    "name": "communication_attachments",
+    "body": "`id` int NOT NULL,\r\n  `communication_id` bigint NOT NULL,\r\n  `type` varchar(50) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `link` text COLLATE utf8mb4_general_ci NOT NULL,\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "communication_replies",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `communication_id` int NOT NULL,\r\n  `user_id` int NOT NULL,\r\n  `reply_text` text COLLATE utf8mb4_general_ci NOT NULL,\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  `parent_reply_id` int DEFAULT NULL,\r\n  `status` enum('active','deleted') COLLATE utf8mb4_general_ci DEFAULT 'active',\r\n  PRIMARY KEY (`id`),\r\n  KEY `idx_communication` (`communication_id`),\r\n  KEY `idx_user` (`user_id`),\r\n  KEY `idx_created` (`created_at`),\r\n  KEY `idx_parent` (`parent_reply_id`)"
+  },
+  {
+    "name": "communications",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `title` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `description` text COLLATE utf8mb4_general_ci NOT NULL,\r\n  `communication_type` enum('general','permission') COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'general',\r\n  `users` text COLLATE utf8mb4_general_ci NOT NULL COMMENT 'Comma separated user IDs: 1,2,3,4',\r\n  `viewed_users` text COLLATE utf8mb4_general_ci COMMENT 'Comma separated user IDs who viewed',\r\n  `created_by` int NOT NULL COMMENT 'User ID who created communication',\r\n  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  `start_time` datetime DEFAULT NULL,\r\n  `end_time` datetime DEFAULT NULL,\r\n  `attachment_url` varchar(200) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `link` varchar(200) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "company_info",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `company_name` varchar(255) NOT NULL,\r\n  `email` varchar(255) NOT NULL,\r\n  `phone` varchar(50) NOT NULL,\r\n  `address` text NOT NULL,\r\n  `website` varchar(255) DEFAULT NULL,\r\n  `facebook` varchar(255) DEFAULT NULL,\r\n  `twitter` varchar(255) DEFAULT NULL,\r\n  `instagram` varchar(255) DEFAULT NULL,\r\n  `linkedin` varchar(255) DEFAULT NULL,\r\n  `youtube` varchar(255) DEFAULT NULL,\r\n  `logo` varchar(255) DEFAULT NULL,\r\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "contact_messages",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `name` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `email` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `subject` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `message` text COLLATE utf8mb4_general_ci NOT NULL,\r\n  `status` varchar(20) COLLATE utf8mb4_general_ci DEFAULT 'unread',\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "customers_no_invoice",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `report_id` int DEFAULT NULL,\r\n  `name` varchar(100) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `phone` varchar(20) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `amount` decimal(12,2) DEFAULT NULL,\r\n  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`),\r\n  KEY `report_id` (`report_id`)"
+  },
+  {
+    "name": "department",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `name` varchar(100) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "document_comments",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `document_id` int NOT NULL,\r\n  `user_id` int NOT NULL,\r\n  `parent_comment_id` int DEFAULT NULL,\r\n  `comment_text` text COLLATE utf8mb4_general_ci NOT NULL,\r\n  `commented_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "document_shares",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `document_id` int NOT NULL,\r\n  `shared_by` int NOT NULL,\r\n  `shared_to` int NOT NULL,\r\n  `shared_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `is_forward` tinyint(1) DEFAULT '0',\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "documents",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `title` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `type` varchar(100) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'general',\r\n  `file_type` varchar(20) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'pdf',\r\n  `file_path` varchar(500) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `description` text COLLATE utf8mb4_general_ci,\r\n  `status` enum('open','closed') COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'open',\r\n  `created_by` int NOT NULL,\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "ed_comment_ed_seen",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `ed_user_id` int NOT NULL,\r\n  `root_comment_id` int NOT NULL,\r\n  `module_type` varchar(50) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `record_id` int NOT NULL,\r\n  `seen_at` timestamp NULL DEFAULT NULL,\r\n  `last_reply_id` int DEFAULT NULL,\r\n  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`),\r\n  UNIQUE KEY `uq_ed_root` (`ed_user_id`,`root_comment_id`),\r\n  KEY `idx_ed_unseen` (`ed_user_id`,`seen_at`)"
+  },
+  {
+    "name": "ed_comment_recipients",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `comment_id` int NOT NULL,\r\n  `user_id` int NOT NULL,\r\n  `module_type` varchar(50) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `record_id` int NOT NULL,\r\n  `replied_at` timestamp NULL DEFAULT NULL,\r\n  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`),\r\n  UNIQUE KEY `uq_comment_user` (`comment_id`,`user_id`),\r\n  KEY `idx_user_unreplied` (`user_id`,`replied_at`),\r\n  KEY `idx_module_record` (`module_type`,`record_id`)"
+  },
+  {
+    "name": "ed_module_comments",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `module_type` varchar(50) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `record_id` int NOT NULL,\r\n  `parent_id` int DEFAULT NULL,\r\n  `user_id` int NOT NULL,\r\n  `message` text COLLATE utf8mb4_general_ci NOT NULL,\r\n  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`),\r\n  KEY `idx_module_record` (`module_type`,`record_id`),\r\n  KEY `idx_parent` (`parent_id`),\r\n  KEY `idx_user` (`user_id`)"
+  },
+  {
+    "name": "event_images",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `eid` int NOT NULL,\r\n  `url` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`),\r\n  KEY `eid` (`eid`)"
+  },
+  {
+    "name": "events",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `title` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `description` text COLLATE utf8mb4_general_ci,\r\n  `status` enum('draft','published') COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'draft',\r\n  `date` date NOT NULL,\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  `image` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "fees",
+    "body": "`fee_id` int NOT NULL AUTO_INCREMENT,\r\n  `category_id` int NOT NULL,\r\n  `fee_amount` decimal(10,2) NOT NULL,\r\n  `currency` varchar(10) DEFAULT 'RWF',\r\n  PRIMARY KEY (`fee_id`),\r\n  KEY `category_id` (`category_id`)"
+  },
+  {
+    "name": "forest_details",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `member_id` int DEFAULT NULL,\r\n  `forest_area` decimal(10,2) DEFAULT NULL,\r\n  `forest_type` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  PRIMARY KEY (`id`),\r\n  KEY `member_id` (`member_id`)"
+  },
+  {
+    "name": "furniture_details",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `member_id` int DEFAULT NULL,\r\n  `products` text COLLATE utf8mb4_general_ci,\r\n  `cluster` varchar(150) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  PRIMARY KEY (`id`),\r\n  KEY `member_id` (`member_id`)"
+  },
+  {
+    "name": "gallery",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `title` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `url` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `status` enum('active','inactive') COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'active',\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  `album_link` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "harvesting_details",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `member_id` int DEFAULT NULL,\r\n  `cluster` varchar(150) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  PRIMARY KEY (`id`),\r\n  KEY `member_id` (`member_id`)"
+  },
+  {
+    "name": "inventory_items",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `name` varchar(255) NOT NULL,\r\n  `description` text,\r\n  `category` varchar(100) DEFAULT NULL,\r\n  `unit` varchar(50) DEFAULT 'pieces',\r\n  `current_quantity` int DEFAULT '0',\r\n  `min_stock` int DEFAULT '10',\r\n  `created_by` int DEFAULT NULL,\r\n  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`),\r\n  KEY `created_by` (`created_by`)"
+  },
+  {
+    "name": "inventory_transactions",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `item_id` int NOT NULL,\r\n  `type` enum('in','out') NOT NULL,\r\n  `quantity` int NOT NULL,\r\n  `reason` varchar(255) DEFAULT NULL,\r\n  `user_id` int NOT NULL,\r\n  `transaction_date` timestamp NULL DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`),\r\n  KEY `item_id` (`item_id`),\r\n  KEY `user_id` (`user_id`)"
+  },
+  {
+    "name": "leave_request_logs",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `request_id` int NOT NULL,\r\n  `status` varchar(50) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `changed_by` int NOT NULL,\r\n  `comment` text COLLATE utf8mb4_general_ci,\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "leave_requests",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `leave_type` enum('Annual','Compassionate','Others') COLLATE utf8mb4_general_ci NOT NULL,\r\n  `user_id` int DEFAULT NULL,\r\n  `year` year NOT NULL,\r\n  `leave_from` date NOT NULL,\r\n  `return_date` date NOT NULL,\r\n  `requested_days` int NOT NULL,\r\n  `carry_over_days_used` int DEFAULT '0',\r\n  `current_year_days_used` int DEFAULT '0',\r\n  `carry_over_year` int DEFAULT NULL,\r\n  `current_year` int DEFAULT NULL,\r\n  `days_authorized` int DEFAULT '0',\r\n  `remaining_days` int DEFAULT '0',\r\n  `applied_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `applicant_signature` varchar(150) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `hr_id` int DEFAULT NULL,\r\n  `hr_verification_status` varchar(100) COLLATE utf8mb4_general_ci DEFAULT 'pending',\r\n  `hr_verified_at` date DEFAULT NULL,\r\n  `hr_signature` varchar(150) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `executive_id` int DEFAULT NULL,\r\n  `chairman_id` int DEFAULT NULL,\r\n  `executive_verification_status` varchar(100) COLLATE utf8mb4_general_ci DEFAULT 'pending',\r\n  `executive_approved_at` date DEFAULT NULL,\r\n  `executive_signature` varchar(150) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `leave_requests_status` varchar(100) COLLATE utf8mb4_general_ci DEFAULT 'pending',\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  `letter_url` varchar(100) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `ed_signature_and_stamp` varchar(100) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'no',\r\n  `current_year_val` int DEFAULT NULL,\r\n  `balance_updated` tinyint DEFAULT '0' COMMENT '0=not counted, 1=already counted in balance',\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "leave_schedule",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `user_id` int NOT NULL,\r\n  `from_date` date NOT NULL,\r\n  `return_date` date NOT NULL,\r\n  `status` enum('pending','approved','rejected') COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'pending',\r\n  `hr_read_status` enum('unread','read') COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'unread',\r\n  `ed_read_status` enum('unread','read') COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'unread',\r\n  `hr_read_at` timestamp NULL DEFAULT NULL,\r\n  `ed_read_at` timestamp NULL DEFAULT NULL,\r\n  `status_changed_by` int DEFAULT NULL,\r\n  `status_changed_at` timestamp NULL DEFAULT NULL,\r\n  `last_reply_at` timestamp NULL DEFAULT NULL,\r\n  `last_reply_by` int DEFAULT NULL,\r\n  `unread_reply_count` int DEFAULT '0',\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`),\r\n  KEY `idx_user_id` (`user_id`),\r\n  KEY `idx_dates` (`from_date`,`return_date`),\r\n  KEY `idx_status` (`status`),\r\n  KEY `idx_hr_read_status` (`hr_read_status`),\r\n  KEY `idx_ed_read_status` (`ed_read_status`),\r\n  KEY `idx_status_changed_by` (`status_changed_by`),\r\n  KEY `idx_last_reply_at` (`last_reply_at`),\r\n  KEY `idx_unread_reply_count` (`unread_reply_count`)"
+  },
+  {
+    "name": "leave_schedule_replies",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `leave_schedule_id` int NOT NULL,\r\n  `sender_id` int NOT NULL,\r\n  `receiver_id` int DEFAULT NULL,\r\n  `message` text COLLATE utf8mb4_unicode_ci NOT NULL,\r\n  `reply_type` enum('comment','question','answer','approval_comment','rejection_reason') COLLATE utf8mb4_unicode_ci DEFAULT 'comment',\r\n  `is_internal` tinyint(1) DEFAULT '0' COMMENT '1 = internal note (HR/ED only), 0 = visible to employee',\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`),\r\n  KEY `idx_leave_schedule_id` (`leave_schedule_id`),\r\n  KEY `idx_sender_id` (`sender_id`),\r\n  KEY `idx_receiver_id` (`receiver_id`),\r\n  KEY `idx_reply_type` (`reply_type`),\r\n  KEY `idx_created_at` (`created_at`)"
+  },
+  {
+    "name": "logs",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `user_id` int DEFAULT NULL,\r\n  `action` varchar(100) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `description` text COLLATE utf8mb4_general_ci,\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "member_products",
+    "body": "`product_id` int NOT NULL AUTO_INCREMENT,\r\n  `product_name` varchar(200) NOT NULL,\r\n  `company_name` varchar(200) NOT NULL,\r\n  `description` text,\r\n  `phone` varchar(50) DEFAULT NULL,\r\n  `address` text,\r\n  `website_url` varchar(300) DEFAULT NULL,\r\n  `email` varchar(150) DEFAULT NULL,\r\n  `image1_url` varchar(300) DEFAULT NULL,\r\n  `image2_url` varchar(300) DEFAULT NULL,\r\n  `image3_url` varchar(300) DEFAULT NULL,\r\n  `is_active` tinyint(1) DEFAULT '1',\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`product_id`)"
+  },
+  {
+    "name": "member_year_payments",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `member_id` int NOT NULL,\r\n  `year_id` int NOT NULL,\r\n  `payment_status` enum('Paid','Not Paid','Partial') COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'Not Paid',\r\n  `notes` text COLLATE utf8mb4_general_ci,\r\n  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`),\r\n  UNIQUE KEY `uniq_member_year` (`member_id`,`year_id`),\r\n  KEY `idx_year_status` (`year_id`,`payment_status`)"
+  },
+  {
+    "name": "members",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `company_name` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `owner_name` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `shareholder` tinyint(1) DEFAULT NULL,\r\n  `gender` enum('Male','Female') COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `rdb_certificate` varchar(100) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `tin` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `national_id` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `province` varchar(100) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `district` varchar(100) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `role` varchar(150) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `has_rwvca_role` tinyint(1) NOT NULL DEFAULT '0',\r\n  `rwvca_role` varchar(150) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `membership_category_platform_id` int DEFAULT NULL,\r\n  `membership_status` enum('Paid','Not Paid','Partial') COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `registration_status` enum('Paid','Not Paid') COLLATE utf8mb4_general_ci DEFAULT 'Not Paid',\r\n  `registration_paid_date` date DEFAULT NULL,\r\n  `employees_women` int DEFAULT '0',\r\n  `employees_men` int DEFAULT '0',\r\n  `employees_pwd` int DEFAULT '0',\r\n  `phone` varchar(20) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `email` varchar(150) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `date_joined` date DEFAULT NULL,\r\n  `is_active` tinyint(1) DEFAULT '1',\r\n  `membership_category` varchar(100) COLLATE utf8mb4_general_ci NOT NULL,\r\n  PRIMARY KEY (`id`),\r\n  KEY `membership_category_platform_id` (`membership_category_platform_id`)"
+  },
+  {
+    "name": "members_schema_migrations",
+    "body": "`migration_name` varchar(100) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `applied_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`migration_name`)"
+  },
+  {
+    "name": "membership_application_settings",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `application_link` varchar(500) NOT NULL,\r\n  `is_active` tinyint(1) DEFAULT '1',\r\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "membership_attributes",
+    "body": "`attribute_id` int NOT NULL AUTO_INCREMENT,\r\n  `category_id` int NOT NULL,\r\n  `service_id` int NOT NULL,\r\n  `is_available` tinyint(1) DEFAULT '0',\r\n  PRIMARY KEY (`attribute_id`),\r\n  UNIQUE KEY `unique_category_service` (`category_id`,`service_id`),\r\n  KEY `service_id` (`service_id`)"
+  },
+  {
+    "name": "membership_categories",
+    "body": "`category_id` int NOT NULL AUTO_INCREMENT,\r\n  `category_name` varchar(50) NOT NULL,\r\n  `description` text,\r\n  `display_order` int DEFAULT '0',\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`category_id`)"
+  },
+  {
+    "name": "membership_categories_platform",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `name` varchar(100) COLLATE utf8mb4_general_ci NOT NULL,\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "membership_report_comments",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `report_id` int NOT NULL,\r\n  `user_id` int NOT NULL,\r\n  `comment` text NOT NULL,\r\n  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`),\r\n  KEY `report_id` (`report_id`),\r\n  KEY `user_id` (`user_id`)"
+  },
+  {
+    "name": "membership_report_items",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `report_id` int DEFAULT NULL,\r\n  `timber_name` varchar(100) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `category` enum('NORMAL','OTHER') COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `number_of_timber` int DEFAULT '0',\r\n  `price` decimal(12,2) DEFAULT NULL,\r\n  `total_cost` decimal(12,2) DEFAULT NULL,\r\n  `vat` decimal(12,2) DEFAULT NULL,\r\n  `msf` decimal(12,2) DEFAULT NULL,\r\n  `mst` decimal(12,2) DEFAULT NULL,\r\n  `vat_and_msf` decimal(12,2) DEFAULT NULL,\r\n  `vat_and_mst` decimal(12,2) DEFAULT NULL,\r\n  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`),\r\n  KEY `report_id` (`report_id`)"
+  },
+  {
+    "name": "membership_report_logs",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `report_id` int NOT NULL,\r\n  `status` enum('CREATED','UPDATED','SUBMITTED','APPROVED','REVERTED','VIEWED','ASSIGNED','REVIEWED','REMOVED') NOT NULL,\r\n  `user_id` int DEFAULT NULL,\r\n  `comment` text,\r\n  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`),\r\n  KEY `report_id` (`report_id`),\r\n  KEY `user_id` (`user_id`)"
+  },
+  {
+    "name": "membership_report_payments",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `report_id` int DEFAULT NULL,\r\n  `method` enum('MOMO','CASH','BANK','NOT_INVOICED','MEMBERSHIP_FEES_REGISTRETION','MEMBERSHIP_FEES_CONTRIBUTION') COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `amount` decimal(12,2) DEFAULT NULL,\r\n  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`),\r\n  KEY `report_id` (`report_id`)"
+  },
+  {
+    "name": "membership_report_reviewers",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `report_id` int NOT NULL,\r\n  `reviewer_id` int NOT NULL,\r\n  `assigned_by` int DEFAULT NULL,\r\n  `status` enum('PENDING','REVIEWED','APPROVED','REJECTED') DEFAULT 'PENDING',\r\n  `assigned_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`),\r\n  KEY `report_id` (`report_id`),\r\n  KEY `reviewer_id` (`reviewer_id`),\r\n  KEY `assigned_by` (`assigned_by`)"
+  },
+  {
+    "name": "membership_report_viewers",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `report_id` int NOT NULL,\r\n  `user_id` int NOT NULL,\r\n  `viewed_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`),\r\n  UNIQUE KEY `unique_report_viewer` (`report_id`,`user_id`),\r\n  KEY `user_id` (`user_id`)"
+  },
+  {
+    "name": "membership_reports",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `report_type` enum('DAILY','WEEKLY','MONTHLY','QUARTERLY','YEARLY') COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `start_date` date NOT NULL,\r\n  `end_date` date NOT NULL,\r\n  `year` int NOT NULL,\r\n  `month` int DEFAULT NULL,\r\n  `quarter` varchar(11) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `week` int DEFAULT NULL,\r\n  `user_id` int DEFAULT NULL,\r\n  `location` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  `title` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `comment` text COLLATE utf8mb4_general_ci,\r\n  `monthly_month` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `yearly_year` varchar(30) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `status` enum('PENDING','APPROVED','REVERTED') COLLATE utf8mb4_general_ci DEFAULT 'PENDING',\r\n  `submitted_by` int DEFAULT NULL,\r\n  `approved_by` int DEFAULT NULL,\r\n  `approved_at` datetime DEFAULT NULL,\r\n  PRIMARY KEY (`id`),\r\n  KEY `user_id` (`user_id`)"
+  },
+  {
+    "name": "membership_years",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `year_value` smallint NOT NULL,\r\n  `label` varchar(50) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `is_active` tinyint(1) NOT NULL DEFAULT '1',\r\n  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`),\r\n  UNIQUE KEY `uniq_year_value` (`year_value`)"
+  },
+  {
+    "name": "mission_request_logs",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `request_id` int NOT NULL,\r\n  `status` varchar(100) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `changed_by` int NOT NULL,\r\n  `comment` text COLLATE utf8mb4_general_ci,\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "mission_requests",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `user_id` int NOT NULL,\r\n  `destination` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `purpose` text COLLATE utf8mb4_general_ci NOT NULL,\r\n  `departure_date` date NOT NULL,\r\n  `return_date` date NOT NULL,\r\n  `days_requested` int NOT NULL,\r\n  `days_authorized` int DEFAULT NULL,\r\n  `year` year NOT NULL,\r\n  `hr_id` int DEFAULT NULL,\r\n  `executive_id` int DEFAULT NULL,\r\n  `chairman_id` int DEFAULT NULL,\r\n  `mission_requests_status` varchar(100) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'pending',\r\n  `hr_verification_status` varchar(100) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'pending',\r\n  `hr_signature` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `hr_verified_at` timestamp NULL DEFAULT NULL,\r\n  `executive_verification_status` varchar(100) COLLATE utf8mb4_general_ci DEFAULT 'pending',\r\n  `executive_signature` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `executive_approved_at` timestamp NULL DEFAULT NULL,\r\n  `reason` text COLLATE utf8mb4_general_ci,\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  `submitted_by_hr` int NOT NULL,\r\n  `vihicle_prack` varchar(100) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `ed_signature_and_stamp` varchar(100) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'no',\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "notifications",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `receiver_id` int NOT NULL,\r\n  `type` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `title` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `message` text COLLATE utf8mb4_general_ci NOT NULL,\r\n  `status` enum('unread','read') COLLATE utf8mb4_general_ci DEFAULT 'unread',\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  `user_type` varchar(10) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `link` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "nursery_details",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `member_id` int DEFAULT NULL,\r\n  `land_size` decimal(10,2) DEFAULT NULL,\r\n  `seed_type` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `seed_quantity` int DEFAULT NULL,\r\n  `land_ownership` enum('Owned','Rented') COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  PRIMARY KEY (`id`),\r\n  KEY `member_id` (`member_id`)"
+  },
+  {
+    "name": "organization_structure",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `unit_name` varchar(100) NOT NULL,\r\n  `unit_key` varchar(50) NOT NULL,\r\n  `level` enum('top','middle','bottom') NOT NULL,\r\n  `title` varchar(200) NOT NULL,\r\n  `content` text NOT NULL,\r\n  `display_order` int DEFAULT '0',\r\n  `is_active` tinyint(1) DEFAULT '1',\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`),\r\n  UNIQUE KEY `unit_key` (`unit_key`)"
+  },
+  {
+    "name": "partners",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `logo_url` varchar(100) NOT NULL,\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "platform_details",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `pid` int NOT NULL,\r\n  `title` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `subtitle` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `value` text COLLATE utf8mb4_general_ci,\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`),\r\n  KEY `pid` (`pid`)"
+  },
+  {
+    "name": "platforms",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `name` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `description` longtext COLLATE utf8mb4_general_ci NOT NULL,\r\n  `status` enum('published','draft') COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'published',\r\n  `image` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `display_order` int DEFAULT '0',\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "program_images",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `pid` int NOT NULL,\r\n  `url` varchar(255) NOT NULL,\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "programs",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `title` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `description` text COLLATE utf8mb4_general_ci NOT NULL,\r\n  `application_deadline` date NOT NULL,\r\n  `requirements` text COLLATE utf8mb4_general_ci NOT NULL COMMENT 'Comma-separated requirements',\r\n  `why_apply` text COLLATE utf8mb4_general_ci COMMENT 'Comma-separated reasons to apply',\r\n  `application_link` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'Google Form link for applications',\r\n  `status` enum('active','inactive') COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'active',\r\n  `category` enum('upcoming','recent','main') COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'upcoming',\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`),\r\n  KEY `status` (`status`),\r\n  KEY `category` (`category`)"
+  },
+  {
+    "name": "report_attachments",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `report_id` int NOT NULL,\r\n  `file_name` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,\r\n  `file_path` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,\r\n  `uploaded_by` int NOT NULL,\r\n  `mime_type` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,\r\n  `file_size` int DEFAULT '0' COMMENT 'in bytes',\r\n  `uploaded_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`),\r\n  KEY `report_id` (`report_id`)"
+  },
+  {
+    "name": "report_comments",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `report_id` int NOT NULL,\r\n  `parent_id` int DEFAULT NULL,\r\n  `content` text COLLATE utf8mb4_unicode_ci NOT NULL,\r\n  `created_by` int NOT NULL,\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`),\r\n  KEY `parent_id` (`parent_id`),\r\n  KEY `created_by` (`created_by`),\r\n  KEY `idx_report_created` (`report_id`,`created_at`)"
+  },
+  {
+    "name": "report_recipient",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `report_id` int NOT NULL,\r\n  `recipient_type` enum('user','department') COLLATE utf8mb4_unicode_ci NOT NULL,\r\n  `recipient_id` int NOT NULL,\r\n  `assigned_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `read_status` tinyint(1) NOT NULL DEFAULT '0' COMMENT '0 = unread, 1 = read',\r\n  `read_at` timestamp NULL DEFAULT NULL,\r\n  PRIMARY KEY (`id`),\r\n  UNIQUE KEY `uk_report_recipient` (`report_id`,`recipient_type`,`recipient_id`)"
+  },
+  {
+    "name": "reports",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `title` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,\r\n  `type` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,\r\n  `content` text COLLATE utf8mb4_unicode_ci NOT NULL,\r\n  `period_start` date DEFAULT NULL,\r\n  `period_end` date DEFAULT NULL,\r\n  `created_by` int NOT NULL,\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  `time_from` time DEFAULT NULL COMMENT 'Start time for the report',\r\n  `time_to` time DEFAULT NULL COMMENT 'End time for the report',\r\n  `location` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL COMMENT 'Location where report occurs',\r\n  PRIMARY KEY (`id`),\r\n  KEY `idx_created_by` (`created_by`),\r\n  KEY `idx_type_created` (`type`,`created_at`)"
+  },
+  {
+    "name": "requisition_logs",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `requisition_id` int NOT NULL,\r\n  `status` varchar(50) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `changed_by` int NOT NULL,\r\n  `comment` text COLLATE utf8mb4_general_ci,\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "requisition_status_log",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `requisition_id` int NOT NULL,\r\n  `status` varchar(50) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `changed_by` int NOT NULL,\r\n  `comments` text COLLATE utf8mb4_general_ci,\r\n  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "requisitionitems",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `requisition_id` int NOT NULL,\r\n  `sn` int NOT NULL,\r\n  `description` text COLLATE utf8mb4_general_ci,\r\n  `quantity` int DEFAULT '0',\r\n  `unit_price` decimal(15,2) DEFAULT '0.00',\r\n  `total_amount` decimal(15,2) DEFAULT '0.00',\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "requisitions",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `date` date NOT NULL,\r\n  `department_id` int NOT NULL,\r\n  `budget_source` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `account_code` varchar(100) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `total_amount_requested` decimal(15,2) NOT NULL DEFAULT '0.00',\r\n  `amount_in_words` text COLLATE utf8mb4_general_ci,\r\n  `prepared_by` int DEFAULT NULL,\r\n  `sended_to` int NOT NULL,\r\n  `verified_by` int DEFAULT NULL,\r\n  `verified_at` timestamp NULL DEFAULT NULL,\r\n  `approved_by` int DEFAULT NULL,\r\n  `approved_at` timestamp NULL DEFAULT NULL,\r\n  `status` varchar(100) COLLATE utf8mb4_general_ci DEFAULT '',\r\n  `rejection_reason` text COLLATE utf8mb4_general_ci,\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  `viewer_id` int DEFAULT NULL,\r\n  `viewer_status` varchar(30) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'pending',\r\n  `viewer_comment` text COLLATE utf8mb4_general_ci,\r\n  `viewed_at` timestamp NULL DEFAULT NULL,\r\n  `comment` text COLLATE utf8mb4_general_ci,\r\n  `reverted_at` timestamp NULL DEFAULT NULL,\r\n  `reverted_by` int DEFAULT NULL,\r\n  `reversion_reason` text COLLATE utf8mb4_general_ci,\r\n  `submitted_at` datetime DEFAULT NULL,\r\n  `submitted_by` int DEFAULT NULL,\r\n  `verification_comment` text COLLATE utf8mb4_general_ci,\r\n  `approval_comment` text COLLATE utf8mb4_general_ci,\r\n  `rejected_at` datetime DEFAULT NULL,\r\n  `rejected_by` int DEFAULT NULL,\r\n  `finance_status` varchar(30) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'pending',\r\n  `authorized_by` int DEFAULT NULL,\r\n  `authorized_at` datetime DEFAULT NULL,\r\n  `ed_signature_and_stamp` varchar(100) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'no',\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "roles",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `role_name` varchar(50) NOT NULL,\r\n  `description` text,\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "sales_details",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `member_id` int DEFAULT NULL,\r\n  `products` text COLLATE utf8mb4_general_ci,\r\n  `cluster` varchar(150) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  PRIMARY KEY (`id`),\r\n  KEY `member_id` (`member_id`)"
+  },
+  {
+    "name": "services",
+    "body": "`service_id` int NOT NULL AUTO_INCREMENT,\r\n  `service_name` varchar(200) NOT NULL,\r\n  `description` text,\r\n  `display_order` int DEFAULT '0',\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`service_id`)"
+  },
+  {
+    "name": "settings",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `leave_days` int NOT NULL DEFAULT '21',\r\n  `send_email_notification` varchar(5) COLLATE utf8mb4_general_ci DEFAULT 'yes',\r\n  `system_status` enum('live','maintenance','offline') COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'live' COMMENT 'Overall system status: live, maintenance, or offline',\r\n  `export_db_password` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `stamp_with_signature` varchar(255) COLLATE utf8mb4_general_ci NOT NULL DEFAULT '',\r\n  `signature_only` varchar(255) COLLATE utf8mb4_general_ci NOT NULL DEFAULT '',\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "special_requisition_logs",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `special_requisition_id` int NOT NULL,\r\n  `status` varchar(100) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `changed_by` int NOT NULL,\r\n  `comment` text COLLATE utf8mb4_general_ci,\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`),\r\n  KEY `idx_srl_req` (`special_requisition_id`)"
+  },
+  {
+    "name": "special_requisitions",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `title` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `description` mediumtext COLLATE utf8mb4_general_ci,\r\n  `start_time` datetime DEFAULT NULL,\r\n  `end_time` datetime DEFAULT NULL,\r\n  `type` varchar(100) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'Other',\r\n  `type_other` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `date` date NOT NULL,\r\n  `department_id` int NOT NULL,\r\n  `prepared_by` int DEFAULT NULL,\r\n  `sended_to` int NOT NULL DEFAULT '0',\r\n  `executive_id` int DEFAULT NULL,\r\n  `coordinator_id` int DEFAULT NULL,\r\n  `coordinator_verification_status` varchar(30) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'pending',\r\n  `executive_verification_status` varchar(30) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'pending',\r\n  `verified_by` int DEFAULT NULL,\r\n  `verified_at` timestamp NULL DEFAULT NULL,\r\n  `coordinator_verified_at` timestamp NULL DEFAULT NULL,\r\n  `coordinator_signature` varchar(10) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `approved_by` int DEFAULT NULL,\r\n  `approved_at` timestamp NULL DEFAULT NULL,\r\n  `executive_signature` varchar(10) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `executive_approved_at` timestamp NULL DEFAULT NULL,\r\n  `ed_signature_and_stamp` varchar(30) COLLATE utf8mb4_general_ci DEFAULT 'no',\r\n  `status` varchar(100) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'draft',\r\n  `rejection_reason` text COLLATE utf8mb4_general_ci,\r\n  `reason` text COLLATE utf8mb4_general_ci,\r\n  `viewer_id` int DEFAULT NULL,\r\n  `viewer_status` varchar(30) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'pending',\r\n  `viewer_comment` text COLLATE utf8mb4_general_ci,\r\n  `viewed_at` timestamp NULL DEFAULT NULL,\r\n  `comment` text COLLATE utf8mb4_general_ci,\r\n  `reverted_at` timestamp NULL DEFAULT NULL,\r\n  `reverted_by` int DEFAULT NULL,\r\n  `reversion_reason` text COLLATE utf8mb4_general_ci,\r\n  `verification_comment` text COLLATE utf8mb4_general_ci,\r\n  `approval_comment` text COLLATE utf8mb4_general_ci,\r\n  `rejected_at` datetime DEFAULT NULL,\r\n  `rejected_by` int DEFAULT NULL,\r\n  `authorized_by` int DEFAULT NULL,\r\n  `authorized_at` datetime DEFAULT NULL,\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`),\r\n  KEY `idx_sr_prepared_by` (`prepared_by`),\r\n  KEY `idx_sr_sended_to` (`sended_to`),\r\n  KEY `idx_sr_status` (`status`),\r\n  KEY `idx_sr_type` (`type`),\r\n  KEY `idx_sr_department` (`department_id`)"
+  },
+  {
+    "name": "subscribers",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `email` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `subscribed_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `status` enum('active','unsubscribed','bounced') COLLATE utf8mb4_general_ci DEFAULT 'active',\r\n  `ip_address` varchar(45) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `source` varchar(100) COLLATE utf8mb4_general_ci DEFAULT 'footer',\r\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`),\r\n  UNIQUE KEY `email` (`email`)"
+  },
+  {
+    "name": "team",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `names` varchar(30) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `email` varchar(30) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `phone` varchar(30) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `image` varchar(200) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `bio` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `role` varchar(30) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `password` varchar(200) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `active` int NOT NULL,\r\n  `resetcode` int DEFAULT NULL,\r\n  `deleted` varchar(100) COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'no',\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "ticket_logs",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `ticket_id` int NOT NULL,\r\n  `user_id` int NOT NULL,\r\n  `action` varchar(50) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `details` text COLLATE utf8mb4_general_ci,\r\n  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "ticket_replies",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `ticket_id` int NOT NULL,\r\n  `user_id` int NOT NULL,\r\n  `message` text COLLATE utf8mb4_general_ci NOT NULL,\r\n  `attachments` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `is_status_update` tinyint(1) NOT NULL DEFAULT '0',\r\n  `new_status` varchar(20) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`),\r\n  KEY `ticket_id` (`ticket_id`)"
+  },
+  {
+    "name": "tickets",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `title` varchar(255) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `description` text COLLATE utf8mb4_general_ci NOT NULL,\r\n  `status` enum('open','in_progress','pending','resolved','closed') COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'open',\r\n  `priority` enum('low','medium','high','urgent') COLLATE utf8mb4_general_ci NOT NULL DEFAULT 'medium',\r\n  `assigned_to` int DEFAULT NULL,\r\n  `created_by` int NOT NULL,\r\n  `category` varchar(50) COLLATE utf8mb4_general_ci DEFAULT 'general',\r\n  `attachments` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  `resolved_at` datetime DEFAULT NULL,\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "todo_activity_log",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `task_id` int NOT NULL,\r\n  `user_id` int NOT NULL,\r\n  `action` varchar(50) COLLATE utf8mb4_general_ci NOT NULL COMMENT 'Type of action (created, updated, shared, commented, status_changed, etc.)',\r\n  `details` text COLLATE utf8mb4_general_ci COMMENT 'Details about the action',\r\n  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`),\r\n  KEY `idx_task_activity` (`task_id`,`created_at`),\r\n  KEY `idx_user_activity` (`user_id`,`created_at`)"
+  },
+  {
+    "name": "todo_comments",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `task_id` int NOT NULL,\r\n  `user_id` int NOT NULL,\r\n  `comment` text COLLATE utf8mb4_general_ci NOT NULL,\r\n  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`),\r\n  KEY `user_id` (`user_id`),\r\n  KEY `idx_todo_comments_task` (`task_id`)"
+  },
+  {
+    "name": "todo_shares",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `task_id` int NOT NULL,\r\n  `shared_by` int NOT NULL COMMENT 'User who shared the task',\r\n  `shared_with` int NOT NULL COMMENT 'User who received the task',\r\n  `permission` enum('view','edit','complete') COLLATE utf8mb4_general_ci DEFAULT 'view' COMMENT 'Permission level',\r\n  `status` enum('pending','accepted','declined') COLLATE utf8mb4_general_ci DEFAULT 'pending' COMMENT 'Share status',\r\n  `shared_at` datetime DEFAULT CURRENT_TIMESTAMP,\r\n  `responded_at` datetime DEFAULT NULL,\r\n  `comments` text COLLATE utf8mb4_general_ci COMMENT 'Comments or notes',\r\n  PRIMARY KEY (`id`),\r\n  UNIQUE KEY `unique_share` (`task_id`,`shared_with`),\r\n  KEY `shared_by` (`shared_by`),\r\n  KEY `idx_todo_shares_task` (`task_id`),\r\n  KEY `idx_todo_shares_with` (`shared_with`,`status`)"
+  },
+  {
+    "name": "user_allowed_days",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `user_id` int NOT NULL,\r\n  `year` int NOT NULL,\r\n  `allowed_days` int NOT NULL DEFAULT '0',\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  PRIMARY KEY (`id`)"
+  },
+  {
+    "name": "user_tasks",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `user_id` int NOT NULL,\r\n  `title` varchar(300) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `due_date` date NOT NULL,\r\n  `is_completed` tinyint(1) DEFAULT '0',\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\r\n  `from_datetime` datetime DEFAULT NULL COMMENT 'Start date and time for the task',\r\n  `to_datetime` datetime DEFAULT NULL COMMENT 'End date and time for the task',\r\n  `description` text COLLATE utf8mb4_general_ci COMMENT 'Detailed task description',\r\n  `priority` enum('Low','Medium','High','Urgent') COLLATE utf8mb4_general_ci DEFAULT 'Medium' COMMENT 'Task priority',\r\n  `location` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'Task location',\r\n  `is_shared` tinyint(1) DEFAULT '0' COMMENT 'Whether task is shared with others',\r\n  `shared_by` int DEFAULT NULL COMMENT 'User who shared this task (if shared)',\r\n  `shared_at` datetime DEFAULT NULL COMMENT 'When the task was shared',\r\n  PRIMARY KEY (`id`),\r\n  KEY `idx_user_tasks_owner` (`user_id`),\r\n  KEY `idx_user_tasks_shared` (`is_shared`,`shared_by`)"
+  },
+  {
+    "name": "users",
+    "body": "`id` int NOT NULL AUTO_INCREMENT,\r\n  `names` varchar(30) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `email` varchar(30) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `personal_email` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `phone` varchar(30) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `other_phone` varchar(20) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `gender` varchar(10) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `image` varchar(200) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `bio` varchar(255) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `role` varchar(30) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `department_ID` int NOT NULL,\r\n  `working_area` varchar(150) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `living_district` varchar(150) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `dob` date DEFAULT NULL,\r\n  `nationality` varchar(100) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `employee_id_number` varchar(50) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `password` varchar(200) COLLATE utf8mb4_general_ci NOT NULL,\r\n  `active` int NOT NULL,\r\n  `resetcode` int DEFAULT NULL,\r\n  `deleted` varchar(100) COLLATE utf8mb4_general_ci NOT NULL DEFAULT '0',\r\n  `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `updated_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,\r\n  `deleted_at` timestamp NULL DEFAULT NULL,\r\n  `signature_url` varchar(100) COLLATE utf8mb4_general_ci DEFAULT NULL,\r\n  `signature_approved` varchar(10) COLLATE utf8mb4_general_ci NOT NULL DEFAULT '0',\r\n  `allowed_leave_days` int NOT NULL DEFAULT '0',\r\n  PRIMARY KEY (`id`)"
+  }
+]
