@@ -3,6 +3,7 @@
  */
 
 const LOCAL_DB_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
+const CLOUD_DB_PATTERN = /render\.com|amazonaws\.com|rds\.|azure\.com|mongodb\.net|supabase/i;
 
 export function isLocalDbHost(host) {
   if (!host || typeof host !== 'string') return false;
@@ -38,23 +39,25 @@ export function validateEnv() {
     errors.push('UAT_DATABASE_* configuration is incomplete for NODE_ENV=uat');
   }
 
-  if (devHost && !isLocalDbHost(devHost)) {
-    errors.push(`DEV_DATABASE_HOST must be local only (got: ${devHost})`);
-  }
-  if (proHost && !isLocalDbHost(proHost)) {
-    errors.push(`PRO_DATABASE_HOST must be local only (got: ${proHost})`);
-  }
-  if (uatHost && !isLocalDbHost(uatHost)) {
-    errors.push(`UAT_DATABASE_HOST must be local only (got: ${uatHost})`);
-  }
-
-  // Block known remote/cloud database patterns
-  const cloudPattern = /render\.com|amazonaws\.com|rds\.|azure\.com|mongodb\.net|supabase/i;
-  [devHost, proHost, uatHost].forEach((h) => {
-    if (h && cloudPattern.test(h)) {
-      errors.push(`Remote cloud database host is not allowed: ${h}`);
+  // Local/dev/uat: keep databases on localhost only.
+  // Production on Render must be allowed to use a remote PRO_DATABASE_HOST.
+  if (!isProd) {
+    if (devHost && !isLocalDbHost(devHost)) {
+      errors.push(`DEV_DATABASE_HOST must be local only (got: ${devHost})`);
     }
-  });
+    if (proHost && !isLocalDbHost(proHost)) {
+      errors.push(`PRO_DATABASE_HOST must be local only outside production (got: ${proHost})`);
+    }
+    if (uatHost && !isLocalDbHost(uatHost)) {
+      errors.push(`UAT_DATABASE_HOST must be local only (got: ${uatHost})`);
+    }
+
+    [devHost, proHost, uatHost].forEach((h) => {
+      if (h && CLOUD_DB_PATTERN.test(h)) {
+        errors.push(`Remote cloud database host is not allowed outside production: ${h}`);
+      }
+    });
+  }
 
   if (errors.length > 0) {
     console.error('Environment validation failed:');

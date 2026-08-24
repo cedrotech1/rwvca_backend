@@ -5,7 +5,7 @@
   "type": "commonjs",
   "main": "index.js",
   "scripts": {
-    "start": "babel-node dist/index.js",
+    "start": "node dist/index.js",
     "start:prod": "cross-env NODE_ENV=production nodemon --exec babel-node ./src/index.js",
     "start:dev": "cross-env NODE_ENV=development nodemon --exec babel-node ./src/index.js",
     "start:uat": "cross-env NODE_ENV=uat nodemon --exec babel-node ./src/index.js",
