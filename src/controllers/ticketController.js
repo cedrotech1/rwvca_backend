@@ -48,7 +48,11 @@ async function notifyUsers(userIds, payload) {
 async function adminsAndHr(excludeId = null) {
   return db.Users.findAll({
     where: {
-      [Op.or]: [{ role: { [Op.iLike]: "admin" } }, { role: { [Op.iLike]: "hr" } }],
+      [Op.or]: [
+        { role: { [Op.iLike]: "admin" } },
+        { role: { [Op.iLike]: "hr" } },
+        { role: { [Op.iLike]: "accountant" } },
+      ],
       ...(excludeId ? { id: { [Op.ne]: excludeId } } : {}),
     },
     attributes: ["id", "names", "email", "role"],

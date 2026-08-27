@@ -141,6 +141,18 @@ function dashboardProfile(role) {
       finance: false,
     };
   }
+  if (value === "accountant") {
+    return {
+      key: "accountant",
+      label: "Finance & HR operations",
+      subtitle: "You manage staff workflow like HR, plus finance-ready requisitions and membership reports.",
+      sees_all: true,
+      manage: MY_WORKFLOW.concat(["users", "finance_requisitions", "membership_reports"]),
+      cms: false,
+      users: true,
+      finance: true,
+    };
+  }
   if (value === "admin") {
     return {
       key: "admin",
@@ -153,7 +165,7 @@ function dashboardProfile(role) {
       finance: false,
     };
   }
-  if (value === "accountant" || value === "assistant to the accountant" || value === "assistant to ed") {
+  if (value === "assistant to the accountant" || value === "assistant to ed") {
     return {
       key: "finance",
       label: value === "assistant to ed" ? "Petty cash finance" : "Finance",

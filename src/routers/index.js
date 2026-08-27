@@ -45,6 +45,7 @@ import edFullAccessRouter from "./edFullAccessRouter.js";
 import memberProductRouter from "./memberProductRouter.js";
 import membershipSetupRouter from "./membershipSetupRouter.js";
 import chatAssistantRouter from "./chatAssistantRouter.js";
+import procurementRouter from "./procurementRouter.js";
 
 const router = express.Router();
 
@@ -96,5 +97,6 @@ router.use("/ed-full-access", edFullAccessRouter);
 router.use("/member-products", memberProductRouter);
 router.use("/membership-setup", membershipSetupRouter);
 router.use("/assistant", chatAssistantRouter);
+router.use("/procurements", procurementRouter);
 
 export default router;

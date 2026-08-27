@@ -28,6 +28,7 @@ const PRIVATE_FOLDERS = new Set([
   "leave_letters",
   "reports",
   "requisitions",
+  "procurement",
   "tmp",
 ]);
 
