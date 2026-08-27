@@ -141,7 +141,8 @@ export const addUser = asyncHandler(async (req, res) => {
     nationality: body.nationality || null,
     employee_id_number: body.employee_id_number || null,
     password: await hashPassword(plainPassword),
-    active: body.active === undefined ? 0 : Number(body.active),
+    active: 0,
+    force_deactivated: 0,
     deleted: "0",
     signature_approved: "0",
     allowed_leave_days: body.allowed_leave_days || 0,
@@ -159,20 +160,20 @@ export const addUser = asyncHandler(async (req, res) => {
     receiverId: user.id,
     type: "user_created",
     title: "Welcome to RWVCA Portal",
-    message: "Your staff account has been created. Please log in and complete your profile. Login credentials were sent to your email.",
+    message: "Your staff account has been created. It stays inactive until you log in and complete your profile (including signature).",
     link: "/profile",
     email: false,
     whatsapp: true,
     emailPayload: buildEmailPayload("user", user, {
       intro: "Your RWVCA staff account has been created successfully.",
       actor: req.user,
-      actionRequired: "Log in, update your profile, and upload your signature for HR approval.",
+      actionRequired: "Log in with the emailed password, complete your profile and signature to activate your account.",
       extras: { action: "created" },
     }),
   });
   await notifyStaff(user, {
     subject: "Welcome to RWVCA Portal - Your Account Has Been Created",
-    message: "Your staff account has been created. Please log in and complete your profile.",
+    message: "Your staff account has been created. Please log in and complete your profile to activate it.",
     link: "/profile",
     password: plainPassword,
     email: true,
@@ -201,8 +202,16 @@ export const updateUser = asyncHandler(async (req, res) => {
   if (!canManageUsers(req.user.role)) {
     delete body.role;
     delete body.active;
+    delete body.force_deactivated;
     delete body.department_ID;
     delete body.deleted;
+  } else if (body.active !== undefined) {
+    if (Number(body.active) === 1) {
+      body.force_deactivated = 0;
+    } else {
+      body.active = 0;
+      body.force_deactivated = 1;
+    }
   }
 
   await user.update(body);
@@ -233,7 +242,7 @@ export const deleteUser = asyncHandler(async (req, res) => {
   if (!canManageUsers(req.user.role)) return fail(res, "Access denied", 403);
   const user = await Users.findByPk(req.params.id);
   if (!user) return fail(res, "User not found", 404);
-  await user.update({ deleted: "1", active: 0, deleted_at: new Date() });
+  await user.update({ deleted: "1", active: 0, force_deactivated: 1, deleted_at: new Date() });
   await createLog(req.user.id, "delete_user", `Deleted user #${user.id}`);
   await createNotification({
       whatsapp: true,
@@ -255,7 +264,7 @@ export const restoreUser = asyncHandler(async (req, res) => {
   if (!canManageUsers(req.user.role)) return fail(res, "Access denied", 403);
   const user = await Users.findByPk(req.params.id);
   if (!user) return fail(res, "User not found", 404);
-  await user.update({ deleted: "0", active: 1, deleted_at: null });
+  await user.update({ deleted: "0", active: 1, force_deactivated: 0, deleted_at: null });
   await createLog(req.user.id, "restore_user", `Restored user #${user.id}`);
   await createNotification({
       whatsapp: true,
@@ -278,9 +287,44 @@ export const setUserActive = (active) =>
     if (!canManageUsers(req.user.role)) return fail(res, "Access denied", 403);
     const user = await Users.findByPk(req.params.id);
     if (!user || String(user.deleted) === "1") return fail(res, "User not found", 404);
-    await user.update({ active });
-    await createLog(req.user.id, active ? "activate_user" : "deactivate_user", `User #${user.id}`);
-    return ok(res, { id: user.id, active }, active ? "User activated" : "User deactivated");
+
+    if (active) {
+      // Manager activate: unlock login and mark active.
+      await user.update({ active: 1, force_deactivated: 0 });
+      await createLog(req.user.id, "activate_user", `User #${user.id}`);
+      await createNotification({
+        whatsapp: true,
+        receiverId: user.id,
+        type: "account_restored",
+        title: "Your RWVCA Account Has Been Activated",
+        message: "An administrator activated your staff account. You can use the full system.",
+        link: "/dashboard",
+        emailPayload: buildEmailPayload("user", user, {
+          intro: "Your RWVCA staff account has been activated by an administrator.",
+          actor: req.user,
+          extras: { action: "activated" },
+        }),
+      });
+      return ok(res, { id: user.id, active: 1, force_deactivated: 0 }, "User activated");
+    }
+
+    // Manager deactivate: block login even if profile is complete.
+    await user.update({ active: 0, force_deactivated: 1 });
+    await createLog(req.user.id, "deactivate_user", `User #${user.id}`);
+    await createNotification({
+      whatsapp: true,
+      receiverId: user.id,
+      type: "account_deactivated",
+      title: "Your RWVCA Account Has Been Deactivated",
+      message: "An administrator deactivated your staff account. You cannot log in until it is reactivated.",
+      link: "/login",
+      emailPayload: buildEmailPayload("user", user, {
+        intro: "Your RWVCA staff account has been deactivated by an administrator.",
+        actor: req.user,
+        extras: { action: "deactivated" },
+      }),
+    });
+    return ok(res, { id: user.id, active: 0, force_deactivated: 1 }, "User deactivated");
   });
 
 export const setSignatureApproved = (approved) =>

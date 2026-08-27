@@ -7,6 +7,12 @@ import { ok, fail } from "../utils/apiResponse.js";
 import { verifyPassword, hashPassword, generateResetCode } from "../utils/password.js";
 import { createLog } from "../services/logService.js";
 import fileStorage from "../utils/fileStorage.js";
+import {
+  getMissingProfileFields,
+  isForceDeactivated,
+  isPendingProfileActivation,
+  isProfileComplete,
+} from "../utils/profileCompleteness.js";
 const { saveRequestFile } = fileStorage;
 
 const Users = db.Users;
@@ -24,6 +30,18 @@ function signToken(user) {
 function isDeleted(user) {
   const value = String(user.deleted ?? "0");
   return value === "1" || value.toLowerCase() === "yes";
+}
+
+function withAccountFlags(user) {
+  const safe = typeof user.toJSON === "function" ? user.toJSON() : { ...user };
+  delete safe.password;
+  delete safe.resetcode;
+  const missing = getMissingProfileFields(safe);
+  safe.profile_complete = missing.length === 0;
+  safe.missing_profile_fields = missing;
+  safe.needs_profile_completion = isPendingProfileActivation(safe);
+  safe.force_deactivated = Number(safe.force_deactivated) === 1 ? 1 : 0;
+  return safe;
 }
 
 export const login = asyncHandler(async (req, res) => {
@@ -51,17 +69,33 @@ export const login = asyncHandler(async (req, res) => {
     return fail(res, "Incorrect password", 401);
   }
 
-  if (Number(user.active) !== 1) {
-    return fail(res, "Your account is not active", 403);
+  // Manager-suspended accounts cannot log in at all.
+  if (isForceDeactivated(user)) {
+    return fail(
+      res,
+      "Your account has been deactivated by an administrator. Contact HR for help.",
+      403
+    );
   }
 
-  await createLog(user.id, "login", `User ${user.names} signed in`);
+  // New / incomplete accounts stay inactive but may log in to finish profile.
+  const pending = isPendingProfileActivation(user);
+  await createLog(
+    user.id,
+    "login",
+    pending
+      ? `User ${user.names} signed in (pending profile activation)`
+      : `User ${user.names} signed in`
+  );
 
-  const safe = user.toJSON();
-  delete safe.password;
-  delete safe.resetcode;
-
-  return ok(res, { token: signToken(user), user: safe }, "Login successful");
+  const safe = withAccountFlags(user);
+  return ok(
+    res,
+    { token: signToken(user), user: safe },
+    pending
+      ? "Login successful. Please complete your profile to activate your account."
+      : "Login successful"
+  );
 });
 
 export const me = asyncHandler(async (req, res) => {
@@ -69,7 +103,7 @@ export const me = asyncHandler(async (req, res) => {
     attributes: USER_SAFE,
     include: [{ model: db.Department, as: "department", attributes: ["id", "name"] }],
   });
-  return ok(res, user);
+  return ok(res, withAccountFlags(user));
 });
 
 export const logout = asyncHandler(async (req, res) => {
@@ -192,6 +226,10 @@ const PROFILE_FIELDS = [
 
 export const updateProfile = asyncHandler(async (req, res) => {
   const user = await Users.findByPk(req.user.id);
+  if (isForceDeactivated(user)) {
+    return fail(res, "Your account has been deactivated by an administrator.", 403);
+  }
+
   const payload = {};
   PROFILE_FIELDS.forEach((field) => {
     if (req.body[field] !== undefined) payload[field] = req.body[field];
@@ -203,11 +241,19 @@ export const updateProfile = asyncHandler(async (req, res) => {
     return fail(res, error.message);
   }
   await user.update(payload);
-  await createLog(user.id, "update_profile", "Updated profile");
-  const safe = user.toJSON();
-  delete safe.password;
-  delete safe.resetcode;
-  return ok(res, safe, "Profile updated");
+  await user.reload();
+
+  let message = "Profile updated";
+  if (!isForceDeactivated(user) && Number(user.active) !== 1 && isProfileComplete(user)) {
+    await user.update({ active: 1, force_deactivated: 0 });
+    await user.reload();
+    message = "Profile completed. Your account is now active.";
+    await createLog(user.id, "activate_user_by_profile", "Account activated after profile completion");
+  } else {
+    await createLog(user.id, "update_profile", "Updated profile");
+  }
+
+  return ok(res, withAccountFlags(user), message);
 });
 
 export const updateSignature = asyncHandler(async (req, res) => {
@@ -220,10 +266,24 @@ export const updateSignature = asyncHandler(async (req, res) => {
   }
   if (!signature_url) return fail(res, "Please upload a signature file");
   const user = await Users.findByPk(req.user.id);
+  if (isForceDeactivated(user)) {
+    return fail(res, "Your account has been deactivated by an administrator.", 403);
+  }
   await user.update({
     signature_url,
     signature_approved: "0",
   });
-  await createLog(user.id, "update_signature", "Updated signature");
-  return ok(res, { signature_url: user.signature_url, signature_approved: user.signature_approved }, "Signature updated");
+  await user.reload();
+
+  let message = "Signature updated";
+  if (!isForceDeactivated(user) && Number(user.active) !== 1 && isProfileComplete(user)) {
+    await user.update({ active: 1, force_deactivated: 0 });
+    await user.reload();
+    message = "Signature saved. Your profile is complete and your account is now active.";
+    await createLog(user.id, "activate_user_by_profile", "Account activated after signature upload");
+  } else {
+    await createLog(user.id, "update_signature", "Updated signature");
+  }
+
+  return ok(res, withAccountFlags(user), message);
 });
