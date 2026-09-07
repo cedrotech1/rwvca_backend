@@ -1,6 +1,7 @@
 import db from "../database/models/index.js";
 import Email from "../utils/mailer.js";
 import { toPlainText } from "../utils/plainText.js";
+import { normalizeNotificationPriority, NOTIFICATION_PRIORITIES } from "../utils/notificationPriority.js";
 import {
   buildWhatsAppText,
   normalizeRwandaPhone,
@@ -79,6 +80,8 @@ export const NOTIFICATION_TYPES = {
   ED_NOTE: "ed_note",
   GENERIC: "notification",
 };
+
+export { NOTIFICATION_PRIORITIES, normalizeNotificationPriority };
 
 export async function sendStaffEmail(user, { subject, message, link, heading, password, emailPayload }) {
   if (!user?.email) return;
@@ -170,14 +173,20 @@ export async function createNotification({
   email = true,
   whatsapp = true,
   emailPayload = null,
+  priority = "middle",
 }) {
   const cleanTitle = toPlainText(title) || null;
   const cleanMessage = toPlainText(message);
   if (!receiverId || !cleanMessage) return null;
 
   const storedLink = dashboardLink(link);
-  const subject = cleanTitle || "RWVCA Notification";
-  const heading = cleanTitle || "RWVCA Notification";
+  const storedPriority = normalizeNotificationPriority(priority);
+  const priorityLabel = storedPriority.charAt(0).toUpperCase() + storedPriority.slice(1);
+  const subjectBase = cleanTitle || "RWVCA Notification";
+  const subject = storedPriority === "middle" || storedPriority === "low"
+    ? subjectBase
+    : `[${priorityLabel}] ${subjectBase}`;
+  const heading = subjectBase;
 
   try {
     const row = await db.Notifications.create({
@@ -188,6 +197,7 @@ export async function createNotification({
       link: storedLink,
       status: "unread",
       user_type: userType,
+      priority: storedPriority,
     });
 
     if (email !== false || whatsapp !== false) {

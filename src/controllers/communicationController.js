@@ -6,6 +6,7 @@ import { getPagination, paginationMeta } from "../utils/pagination.js";
 import { createLog } from "../services/logService.js";
 import { createNotification } from "../services/notificationService.js";
 import { buildEmailPayload } from "../services/emailNotificationHelpers.js";
+import { requireNotificationPriority } from "../utils/notificationPriority.js";
 import fileStorage from "../utils/fileStorage.js";
 import { toPlainText } from "../utils/plainText.js";
 
@@ -173,6 +174,10 @@ export const createCommunication = asyncHandler(async (req, res) => {
   if (!title || !description || !users) {
     return fail(res, "title, description, and users are required");
   }
+  const priority = requireNotificationPriority(req.body);
+  if (!priority) {
+    return fail(res, "Select notification priority (Send as: Urgent / High / Middle / Low)");
+  }
   const userList = Array.isArray(users) ? users : parseUserIds(users);
   let savedAttachment = null;
   try {
@@ -196,7 +201,9 @@ export const createCommunication = asyncHandler(async (req, res) => {
     link: req.body.link || null,
   });
   if (savedAttachment?.dbPath) {
+    const maxId = await db.CommunicationAttachments.max("id");
     await db.CommunicationAttachments.create({
+      id: (Number(maxId) || 0) + 1,
       communication_id: row.id,
       type: savedAttachment.mimeType || "attachment",
       link: savedAttachment.dbPath,
@@ -215,6 +222,7 @@ export const createCommunication = asyncHandler(async (req, res) => {
           title: row.communication_type === "permission" ? "New permission request" : "New communication",
           message: `${req.user.names}: ${title}`,
           link: `/communications/${row.id}`,
+          priority,
           emailPayload: buildEmailPayload("communication", loaded, {
             intro: row.communication_type === "permission"
               ? `${req.user.names} has sent you a new permission request.`
@@ -236,6 +244,7 @@ export const addCommunicationReply = asyncHandler(async (req, res) => {
   if (!canAccess(req.user, parent)) return fail(res, "Access denied", 403);
   const reply_text = toPlainText(req.body.reply_text || req.body.message);
   if (!reply_text) return fail(res, "reply_text is required");
+  const priority = requireNotificationPriority(req.body) || "middle";
   const parent_reply_id = Number(req.body.parent_reply_id || 0) || null;
   const reply = await db.CommunicationReplies.create({
     communication_id: parent.id,
@@ -257,6 +266,7 @@ export const addCommunicationReply = asyncHandler(async (req, res) => {
         title: `Reply on '${parent.title}'`,
         message: reply_text.slice(0, 160),
         link: `/communications/${parent.id}`,
+        priority,
         emailPayload: buildEmailPayload("communication", loaded, {
           intro: `${req.user.names} replied to "${parent.title}".`,
           actor: req.user,

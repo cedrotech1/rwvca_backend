@@ -6,6 +6,7 @@ import { getPagination, paginationMeta } from "../utils/pagination.js";
 import { createLog } from "../services/logService.js";
 import { createNotification } from "../services/notificationService.js";
 import { buildEmailPayload } from "../services/emailNotificationHelpers.js";
+import { requireNotificationPriority } from "../utils/notificationPriority.js";
 import { getApproverForApplicant, hasSignature, normalizeEdStampChoice, USER_PUBLIC } from "../services/workflowUsers.js";
 import {
   isAdminRole,
@@ -287,6 +288,7 @@ export const createLeaveRequest = asyncHandler(async (req, res) => {
   await createLog(req.user.id, "create_leave_request", `Created leave request #${row.id}`);
 
   const link = `/leave-requests/${row.id}`;
+  const priority = requireNotificationPriority(req.body) || "middle";
   if (officers.direct) {
     await createNotification({
       whatsapp: true,
@@ -295,6 +297,7 @@ export const createLeaveRequest = asyncHandler(async (req, res) => {
       title: `Leave Request #${row.id} – Your Approval Required`,
       message: `${req.user.names} submitted a ${leave_type} leave request for ${requested_days} day(s).`,
       link,
+      priority,
       emailPayload: buildEmailPayload("leave", row, {
         intro: `${req.user.names} submitted a ${leave_type} leave request that requires your direct approval.`,
         actor: req.user,
@@ -309,6 +312,7 @@ export const createLeaveRequest = asyncHandler(async (req, res) => {
       title: `New Leave Request #${row.id}`,
       message: `${req.user.names} submitted a ${leave_type} leave request for ${requested_days} day(s).`,
       link,
+      priority,
       emailPayload: buildEmailPayload("leave", row, {
         intro: `${req.user.names} submitted a new ${leave_type} leave request for HR verification.`,
         actor: req.user,
@@ -371,6 +375,7 @@ export const updateLeaveRequest = asyncHandler(async (req, res) => {
       title: `Leave Request #${row.id} resubmitted`,
       message: `${req.user.names} edited and resubmitted a leave request.`,
       link: `/leave-requests/${row.id}`,
+      priority: requireNotificationPriority(req.body) || "middle",
       emailPayload: buildEmailPayload("leave", row, {
         intro: `${req.user.names} edited and resubmitted a leave request after it was reverted.`,
         actor: req.user,
@@ -425,6 +430,7 @@ export const verifyLeaveByHr = asyncHandler(async (req, res) => {
     title: "Your Leave Request Has Been Verified by HR",
     message: `Your leave request #${row.id} has been verified and is now awaiting final approval.`,
     link,
+      priority: requireNotificationPriority(req.body) || "middle",
     emailPayload: buildEmailPayload("leave", row, {
       intro: "HR has verified your leave request. It is now awaiting final approval from the Executive Director.",
       actor: req.user,
@@ -439,6 +445,7 @@ export const verifyLeaveByHr = asyncHandler(async (req, res) => {
       title: "Leave Request Requires Your Approval",
       message: `HR verified a leave request by ${applicant}.`,
       link,
+      priority: requireNotificationPriority(req.body) || "middle",
       emailPayload: buildEmailPayload("leave", row, {
         intro: `HR has verified the leave request submitted by ${applicant}. Your approval is now required.`,
         actor: req.user,
@@ -474,6 +481,7 @@ export const revertLeaveByHr = asyncHandler(async (req, res) => {
     title: `Leave Request #${row.id} reverted`,
     message: comment || "Your leave request was reverted by HR. Please edit and resubmit.",
     link: `/leave-requests/${row.id}`,
+      priority: requireNotificationPriority(req.body) || "middle",
     emailPayload: buildEmailPayload("leave", row, {
       intro: "Your leave request was reverted by HR and requires corrections before it can proceed.",
       actor: req.user,
@@ -514,6 +522,7 @@ export const approveLeave = asyncHandler(async (req, res) => {
     title: "Your Leave Request Has Been Approved!",
     message: `Leave request #${row.id} is fully approved.`,
     link,
+      priority: requireNotificationPriority(req.body) || "middle",
     emailPayload: buildEmailPayload("leave", row, {
       intro: "Your leave request has received final approval.",
       actor: req.user,
@@ -528,6 +537,7 @@ export const approveLeave = asyncHandler(async (req, res) => {
       title: "Leave Request Fully Approved",
       message: `Request #${row.id} has been approved.`,
       link,
+      priority: requireNotificationPriority(req.body) || "middle",
       emailPayload: buildEmailPayload("leave", row, {
         intro: `Leave request #${row.id} has been fully approved by ${req.user.names}.`,
         actor: req.user,
@@ -554,6 +564,7 @@ export const rejectLeave = asyncHandler(async (req, res) => {
     title: `Leave Request #${row.id} rejected`,
     message: reason ? `Your leave request was rejected. Reason: ${reason}` : "Your leave request was rejected.",
     link: `/leave-requests/${row.id}`,
+      priority: requireNotificationPriority(req.body) || "middle",
     emailPayload: buildEmailPayload("leave", row, {
       intro: "Your leave request was rejected. See the comment below for more information.",
       actor: req.user,

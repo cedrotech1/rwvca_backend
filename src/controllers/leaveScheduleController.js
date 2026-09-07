@@ -6,6 +6,7 @@ import { getPagination, paginationMeta } from "../utils/pagination.js";
 import { createLog } from "../services/logService.js";
 import { createNotification } from "../services/notificationService.js";
 import { buildEmailPayload } from "../services/emailNotificationHelpers.js";
+import { requireNotificationPriority } from "../utils/notificationPriority.js";
 import { findUserByRole, USER_PUBLIC } from "../services/workflowUsers.js";
 import { isAdminRole, isEdRole, isExactHr, isExecutiveRole } from "../utils/roleHelpers.js";
 
@@ -98,6 +99,7 @@ export const createLeaveSchedule = asyncHandler(async (req, res) => {
 
   const loaded = await loadRow(row.id);
   const [hr, ed] = await Promise.all([findUserByRole("HR"), findUserByRole("ED")]);
+  const priority = requireNotificationPriority(req.body) || "middle";
   for (const officer of [hr, ed].filter(Boolean)) {
     await createNotification({
       whatsapp: true,
@@ -106,6 +108,7 @@ export const createLeaveSchedule = asyncHandler(async (req, res) => {
       title: "New leave schedule submitted",
       message: `${req.user.names} submitted leave from ${from_date} to ${return_date}.`,
       link: `/leave-schedule/${row.id}`,
+      priority,
       emailPayload: buildEmailPayload("leave_schedule", loaded, {
         intro: `${req.user.names} has submitted a leave schedule for your review.`,
         actor: req.user,
@@ -149,6 +152,7 @@ export const updateLeaveScheduleStatus = asyncHandler(async (req, res) => {
     title: `Leave schedule ${status}`,
     message: `Your leave schedule from ${row.from_date} to ${row.return_date} was ${status}.`,
     link: `/leave-schedule/${row.id}`,
+      priority: requireNotificationPriority(req.body) || "middle",
     emailPayload: buildEmailPayload("leave_schedule", loaded, {
       intro: `Your leave schedule has been ${status} by ${req.user.names}.`,
       actor: req.user,
@@ -209,6 +213,7 @@ export const addLeaveScheduleReply = asyncHandler(async (req, res) => {
       title: "New leave schedule reply",
       message: `${req.user.names} replied on leave schedule #${row.id}.`,
       link: `/leave-schedule/${row.id}`,
+      priority: requireNotificationPriority(req.body) || "middle",
       emailPayload: buildEmailPayload("leave_schedule", loaded, {
         intro: `${req.user.names} posted a reply on leave schedule #${row.id}.`,
         actor: req.user,

@@ -35,10 +35,14 @@ export const postChatMessage = asyncHandler(async (req, res) => {
   } catch (error) {
     const status = error.response?.status;
     const apiMessage = error.response?.data?.message || error.response?.data?.error;
-    const isTimeout = error.code === "ECONNABORTED" || /timeout/i.test(error.message || "");
+    const rawMessage = String(error.message || "");
+    const isTimeout =
+      error.code === "ECONNABORTED" ||
+      /timeout/i.test(rawMessage) ||
+      /timeout of \d+ms exceeded/i.test(String(apiMessage || ""));
 
     if (isTimeout) {
-      return fail(res, "The assistant is still starting up. Please wait a moment and try again.", 504);
+      return fail(res, "IGITI is taking longer than usual. Please wait a moment and try again.", 504);
     }
 
     if (status === 401 || status === 403) {
@@ -46,6 +50,11 @@ export const postChatMessage = asyncHandler(async (req, res) => {
     }
     if (status === 409) {
       return fail(res, "Assistant is busy. Please wait a moment and try again.", 409);
+    }
+
+    // Never expose raw axios timeout / internal transport messages to the UI.
+    if (/ECONNABORTED|ETIMEDOUT|socket hang up|network/i.test(rawMessage)) {
+      return fail(res, "Could not reach IGITI right now. Please try again.", 502);
     }
 
     return fail(res, apiMessage || error.message || "Assistant request failed", 502);

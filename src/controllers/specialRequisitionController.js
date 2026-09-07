@@ -6,6 +6,7 @@ import { getPagination, paginationMeta } from "../utils/pagination.js";
 import { createLog } from "../services/logService.js";
 import { createNotification } from "../services/notificationService.js";
 import { buildEmailPayload } from "../services/emailNotificationHelpers.js";
+import { requireNotificationPriority } from "../utils/notificationPriority.js";
 import { findUserByRole, getApproverForApplicant, USER_PUBLIC } from "../services/workflowUsers.js";
 import { isAdminRole, isDirectApplicant, isEdRole, isExecutiveRole, isLogisticRole } from "../utils/roleHelpers.js";
 
@@ -183,6 +184,7 @@ export const createVehicleUtilization = asyncHandler(async (req, res) => {
 
   const notifyId = direct ? executive.id : coordinatorId;
   const loaded = await loadRow(row.id);
+  const priority = requireNotificationPriority(req.body) || "middle";
   await createNotification({
       whatsapp: true,
     receiverId: notifyId,
@@ -192,6 +194,7 @@ export const createVehicleUtilization = asyncHandler(async (req, res) => {
       : `Vehicle Utilization #${row.id} – Pending Logistic Verification`,
     message: `${req.user.names} submitted vehicle utilization "${title}".`,
     link: `/special-requisitions/${row.id}`,
+    priority,
     emailPayload: buildEmailPayload("vehicle", loaded, {
       intro: direct
         ? `${req.user.names} has submitted a vehicle utilization request that requires your direct approval.`
@@ -317,6 +320,7 @@ export const updateVehicleUtilizationStatus = asyncHandler(async (req, res) => {
       title: `Vehicle Utilization #${row.id} ${status.replace(/_/g, " ")}`,
       message: reason || comment || `Your vehicle utilization is now ${status.replace(/_/g, " ")}.`,
       link: `/special-requisitions/${row.id}`,
+      priority: requireNotificationPriority(req.body) || "middle",
       emailPayload: buildEmailPayload("vehicle", loaded, {
         intro: `Your vehicle utilization request #${row.id} has been updated to "${status.replace(/_/g, " ")}".`,
         actor: req.user,
@@ -335,6 +339,7 @@ export const updateVehicleUtilizationStatus = asyncHandler(async (req, res) => {
         title: `Vehicle Utilization #${row.id} – Ready for ED Authorization`,
         message: `Request "${row.title}" is ready for Executive Director authorization.`,
         link: `/special-requisitions/${row.id}`,
+      priority: requireNotificationPriority(req.body) || "middle",
         emailPayload: buildEmailPayload("vehicle", loaded, {
           intro: `Vehicle utilization request "${row.title}" has been verified and is ready for Executive Director authorization.`,
           actor: req.user,
@@ -375,6 +380,7 @@ export const authorizeVehicleUtilization = asyncHandler(async (req, res) => {
       title: `Vehicle Utilization #${row.id} authorized`,
       message: "Your vehicle utilization has been authorized by the Executive Director.",
       link: `/special-requisitions/${row.id}`,
+      priority: requireNotificationPriority(req.body) || "middle",
       emailPayload: buildEmailPayload("vehicle", loaded, {
         intro: "Your vehicle utilization request has been authorized by the Executive Director.",
         actor: req.user,

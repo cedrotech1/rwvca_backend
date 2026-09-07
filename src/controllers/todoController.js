@@ -6,6 +6,7 @@ import { getPagination, paginationMeta } from "../utils/pagination.js";
 import { createLog } from "../services/logService.js";
 import { createNotification } from "../services/notificationService.js";
 import { buildEmailPayload } from "../services/emailNotificationHelpers.js";
+import { requireNotificationPriority } from "../utils/notificationPriority.js";
 import { isAdminRole } from "../utils/roleHelpers.js";
 
 async function sharedTaskIds(userId) {
@@ -134,6 +135,8 @@ export const shareTodo = asyncHandler(async (req, res) => {
   }
   const ids = Array.isArray(req.body.user_ids) ? req.body.user_ids : [];
   if (!ids.length) return fail(res, "user_ids is required");
+  const priority = requireNotificationPriority(req.body);
+  if (!priority) return fail(res, "Select notification priority (Send as: Urgent / High / Middle / Low)");
   for (const shared_with of ids) {
     const [share] = await db.TodoShares.findOrCreate({
       where: { task_id: row.id, shared_with },
@@ -152,6 +155,7 @@ export const shareTodo = asyncHandler(async (req, res) => {
       title: "A todo was shared with you",
       message: `${req.user.names} shared '${row.title}' with you.`,
       link: `/todos/${row.id}`,
+      priority,
       emailPayload: buildEmailPayload("todo", loaded, {
         intro: `${req.user.names} has shared a task with you on the RWVCA portal.`,
         actor: req.user,

@@ -49,13 +49,33 @@ async function countSafe(model, where = {}) {
 
 async function statusBreakdown(model, where, field) {
   const total = await countSafe(model, where);
-  const pending = await countSafe(model, { ...where, [field]: { [Op.iLike]: "%pending%" } });
-  const approved = await countSafe(model, { ...where, [field]: { [Op.iLike]: "%approved%" } });
-  const rejected = await countSafe(model, {
-    ...where,
-    [Op.or]: [{ [field]: { [Op.iLike]: "%reject%" } }, { [field]: { [Op.iLike]: "%revert%" } }],
-  });
-  return { total, pending, approved, rejected };
+  const statuses = {};
+  try {
+    const rows = await model.findAll({
+      attributes: [
+        [sequelize.col(field), "status_value"],
+        [sequelize.fn("COUNT", sequelize.literal("1")), "count"],
+      ],
+      where,
+      group: [field],
+      raw: true,
+    });
+    for (const row of rows) {
+      const key = String(row.status_value || "unknown").trim().toLowerCase() || "unknown";
+      statuses[key] = Number(row.count || 0);
+    }
+  } catch {
+    /* keep empty statuses map */
+  }
+
+  const sumMatching = (predicate) =>
+    Object.entries(statuses).reduce((sum, [key, count]) => (predicate(key) ? sum + count : sum), 0);
+
+  const pending = sumMatching((key) => key.includes("pending"));
+  const approved = sumMatching((key) => key.includes("approved") || key === "paid" || key === "authorized");
+  const rejected = sumMatching((key) => key.includes("reject") || key.includes("revert"));
+
+  return { total, pending, approved, rejected, statuses };
 }
 
 async function recentRows(model, where, attributes, extra = {}) {

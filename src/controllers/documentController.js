@@ -8,6 +8,7 @@ import { getPagination, paginationMeta } from "../utils/pagination.js";
 import { createLog } from "../services/logService.js";
 import { createNotification } from "../services/notificationService.js";
 import { buildEmailPayload } from "../services/emailNotificationHelpers.js";
+import { requireNotificationPriority } from "../utils/notificationPriority.js";
 import { isAdminRole, isEdRole } from "../utils/roleHelpers.js";
 import fileStorage from "../utils/fileStorage.js";
 const { saveRequestFile, resolveUploadFilePath } = fileStorage;
@@ -335,6 +336,8 @@ export const shareDocument = asyncHandler(async (req, res) => {
         ? [].concat(req.body.share_to)
         : [];
   if (!ids.length) return fail(res, "Select at least one user to share with");
+  const priority = requireNotificationPriority(req.body);
+  if (!priority) return fail(res, "Select notification priority (Send as: Urgent / High / Middle / Low)");
   const is_forward = req.body.is_forward === true || req.body.is_forward === 1 || req.body.is_forward === "1" ? 1 : 0;
 
   let successCount = 0;
@@ -366,6 +369,7 @@ export const shareDocument = asyncHandler(async (req, res) => {
       title: "New Document Shared",
       message: `${req.user.names} has shared document '${row.title}' with you.`,
       link: `/documents/${row.id}`,
+      priority,
       emailPayload: buildEmailPayload("document", loadedDoc, {
         intro: `${req.user.names} has shared a document with you on the RWVCA portal.`,
         actor: req.user,

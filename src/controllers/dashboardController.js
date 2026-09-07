@@ -31,6 +31,9 @@ function periodRange(query) {
       month,
     };
   }
+  if (period === "all") {
+    return { period: "all", from: null, to: null, year, month: null };
+  }
   if (period === "week") {
     const from = new Date(now);
     const day = from.getDay() || 7;
@@ -59,6 +62,7 @@ function periodRange(query) {
 }
 
 function dateWhere(from, to, field = "created_at") {
+  if (!from || !to) return {};
   return { [field]: { [Op.between]: [from, to] } };
 }
 
@@ -226,13 +230,51 @@ async function countSafe(model, where = {}) {
 
 async function statusBreakdown(model, where, field) {
   const total = await countSafe(model, where);
-  const pending = await countSafe(model, { ...where, [field]: { [Op.iLike]: "%pending%" } });
-  const approved = await countSafe(model, { ...where, [field]: { [Op.iLike]: "%approved%" } });
-  const rejected = await countSafe(model, {
-    ...where,
-    [Op.or]: [{ [field]: { [Op.iLike]: "%reject%" } }, { [field]: { [Op.iLike]: "%revert%" } }],
-  });
-  return { total, pending, approved, rejected };
+  const statuses = {};
+  try {
+    const rows = await model.findAll({
+      attributes: [
+        [sequelize.col(field), "status_value"],
+        [sequelize.fn("COUNT", sequelize.literal("1")), "count"],
+      ],
+      where,
+      group: [field],
+      raw: true,
+    });
+    for (const row of rows) {
+      const key = String(row.status_value || "unknown").trim().toLowerCase() || "unknown";
+      statuses[key] = Number(row.count || 0);
+    }
+  } catch {
+    /* keep empty statuses map */
+  }
+
+  const sumMatching = (predicate) =>
+    Object.entries(statuses).reduce((sum, [key, count]) => (predicate(key) ? sum + count : sum), 0);
+
+  const pending = sumMatching((key) => key.includes("pending"));
+  const approved = sumMatching((key) => key.includes("approved") || key === "paid" || key === "authorized");
+  const rejected = sumMatching((key) => key.includes("reject") || key.includes("revert"));
+
+  return { total, pending, approved, rejected, statuses };
+}
+
+function statusChartFromBreakdown(prefix, stats = {}) {
+  const statuses = stats.statuses || {};
+  const entries = Object.entries(statuses);
+  if (!entries.length) {
+    return [
+      { label: `${prefix} pending`, value: stats.pending || 0 },
+      { label: `${prefix} approved`, value: stats.approved || 0 },
+    ].filter((item) => item.value > 0);
+  }
+  return entries
+    .filter(([, value]) => Number(value) > 0)
+    .sort((a, b) => Number(b[1]) - Number(a[1]))
+    .map(([status, value]) => ({
+      label: `${prefix} ${String(status).replace(/_/g, " ")}`,
+      value: Number(value) || 0,
+    }));
 }
 
 async function sumAmount(model, where, field = "total_amount_requested") {
@@ -290,6 +332,7 @@ function card(key, stats = {}, extra = {}) {
     pending: stats.pending,
     approved: stats.approved,
     rejected: stats.rejected,
+    statuses: stats.statuses || null,
     amount: stats.amount,
     ...extra,
   };
@@ -364,9 +407,6 @@ export const getDashboardOverview = asyncHandler(async (req, res) => {
     orgAttendance,
     orgReqAmount,
     financeRequisitions,
-    financePaid,
-    financePending,
-    financeRejected,
     financeAmount,
     usersTotal,
     usersMale,
@@ -417,9 +457,6 @@ export const getDashboardOverview = asyncHandler(async (req, res) => {
     countSafe(db.Attendance, orgAttendanceWhere),
     sumAmount(db.Requisitions, orgReq),
     statusBreakdown(db.Requisitions, financeWhere, "finance_status"),
-    countSafe(db.Requisitions, { ...financeWhere, finance_status: { [Op.iLike]: "paid" } }),
-    countSafe(db.Requisitions, { ...financeWhere, finance_status: { [Op.iLike]: "pending" } }),
-    countSafe(db.Requisitions, { ...financeWhere, finance_status: { [Op.iLike]: "reject" } }),
     sumAmount(db.Requisitions, financeWhere),
     countSafe(db.Users, { deleted: { [Op.ne]: "1" } }),
     countSafe(db.Users, { deleted: { [Op.ne]: "1" }, gender: { [Op.iLike]: "male" } }),
@@ -460,10 +497,7 @@ export const getDashboardOverview = asyncHandler(async (req, res) => {
   const managedStats = {
     requisitions: { ...orgRequisitions, amount: orgReqAmount },
     finance_requisitions: {
-      total: financeRequisitions.total,
-      pending: financePending,
-      approved: financePaid,
-      rejected: financeRejected,
+      ...financeRequisitions,
       amount: financeAmount,
     },
     vehicle_utilization: orgVehicles,
@@ -492,7 +526,8 @@ export const getDashboardOverview = asyncHandler(async (req, res) => {
     return card(key, managedStats[key], extra);
   });
 
-  const trendFrom = new Date(range.to);
+  const trendTo = range.to || new Date();
+  const trendFrom = new Date(trendTo);
   trendFrom.setMonth(trendFrom.getMonth() - 5);
   trendFrom.setDate(1);
 
@@ -503,9 +538,9 @@ export const getDashboardOverview = asyncHandler(async (req, res) => {
     : profile.sees_all ? {} : { prepared_by: userId };
 
   const [missionTrend, leaveTrend, requisitionTrend] = await Promise.all([
-    monthlyTrend(db.MissionRequests, trendMissionWhere, trendFrom, range.to),
-    monthlyTrend(db.LeaveRequests, trendLeaveWhere, trendFrom, range.to),
-    monthlyTrend(db.Requisitions, trendReqWhere, trendFrom, range.to),
+    monthlyTrend(db.MissionRequests, trendMissionWhere, trendFrom, trendTo),
+    monthlyTrend(db.LeaveRequests, trendLeaveWhere, trendFrom, trendTo),
+    monthlyTrend(db.Requisitions, trendReqWhere, trendFrom, trendTo),
   ]);
 
   let departments = [];
@@ -564,42 +599,21 @@ export const getDashboardOverview = asyncHandler(async (req, res) => {
 
   const statusChart = [];
   if (profile.manage.includes("missions") || profile.sees_all) {
-    statusChart.push(
-      { label: "Missions pending", value: orgMissions.pending },
-      { label: "Missions approved", value: orgMissions.approved },
-    );
+    statusChart.push(...statusChartFromBreakdown("Missions", orgMissions));
   } else {
-    statusChart.push(
-      { label: "My missions pending", value: myMissions.pending },
-      { label: "My missions approved", value: myMissions.approved },
-    );
+    statusChart.push(...statusChartFromBreakdown("My missions", myMissions));
   }
   if (profile.manage.includes("leave_requests") || profile.sees_all) {
-    statusChart.push(
-      { label: "Leave pending", value: orgLeaves.pending },
-      { label: "Leave approved", value: orgLeaves.approved },
-    );
+    statusChart.push(...statusChartFromBreakdown("Leave", orgLeaves));
   } else {
-    statusChart.push(
-      { label: "My leave pending", value: myLeaves.pending },
-      { label: "My leave approved", value: myLeaves.approved },
-    );
+    statusChart.push(...statusChartFromBreakdown("My leave", myLeaves));
   }
   if (profile.manage.includes("finance_requisitions")) {
-    statusChart.push(
-      { label: "Finance pending", value: financePending },
-      { label: "Finance paid", value: financePaid },
-    );
+    statusChart.push(...statusChartFromBreakdown("Finance", financeRequisitions));
   } else if (profile.manage.includes("requisitions") || profile.sees_all) {
-    statusChart.push(
-      { label: "Requisitions pending", value: orgRequisitions.pending },
-      { label: "Requisitions approved", value: orgRequisitions.approved },
-    );
+    statusChart.push(...statusChartFromBreakdown("Requisitions", orgRequisitions));
   } else {
-    statusChart.push(
-      { label: "My requisitions pending", value: myRequisitions.pending },
-      { label: "My requisitions approved", value: myRequisitions.approved },
-    );
+    statusChart.push(...statusChartFromBreakdown("My requisitions", myRequisitions));
   }
 
   const counts = {

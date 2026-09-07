@@ -3,6 +3,14 @@ import {
   getMembershipReports,
   getMembershipReportCoverage,
   getMembershipAnalytics,
+  getMembershipReportPrintOptions,
+  getMembershipReportPrintBundle,
+  getMembershipReportShareUsers,
+  createMembershipMissedShare,
+  getMembershipMissedShares,
+  getMembershipMissedShare,
+  addMembershipMissedShareComment,
+  markMembershipMissedShareSeen,
   getMembershipReport,
   createMembershipReport,
   updateMembershipReport,
@@ -20,6 +28,14 @@ const router = express.Router();
 router.get("/", protect, getMembershipReports);
 router.get("/analytics", protect, getMembershipAnalytics);
 router.get("/coverage", protect, getMembershipReportCoverage);
+router.get("/print-options", protect, getMembershipReportPrintOptions);
+router.get("/print-bundle", protect, getMembershipReportPrintBundle);
+router.get("/share-users", protect, getMembershipReportShareUsers);
+router.get("/missed-shares", protect, getMembershipMissedShares);
+router.post("/missed-shares", protect, createMembershipMissedShare);
+router.get("/missed-shares/:id", protect, getMembershipMissedShare);
+router.post("/missed-shares/:id/comments", protect, addMembershipMissedShareComment);
+router.post("/missed-shares/:id/seen", protect, markMembershipMissedShareSeen);
 router.get("/:id", protect, getMembershipReport);
 router.post("/", protect, createMembershipReport);
 router.put("/:id", protect, updateMembershipReport);

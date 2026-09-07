@@ -8,9 +8,10 @@ import { createNotification } from "../services/notificationService.js";
 import { buildEmailPayload } from "../services/emailNotificationHelpers.js";
 import { USER_PUBLIC } from "../services/workflowUsers.js";
 import { isAdminRole, isAccountantRole, isExecutiveRole, isLogisticRole, isExactHr, canReviewWorkflow } from "../utils/roleHelpers.js";
+import { requireNotificationPriority } from "../utils/notificationPriority.js";
 import { buildMembershipAnalytics } from "../services/membershipAnalyticsService.js";
 
-const USER_ATTR = { attributes: USER_PUBLIC };
+const USER_ATTR = { attributes: [...USER_PUBLIC, "working_area"] };
 const REPORT_TYPES = ["DAILY", "WEEKLY", "MONTHLY", "QUARTERLY", "YEARLY"];
 
 const PAYMENT_METHODS = [
@@ -89,6 +90,25 @@ function canApprove(role) {
   return String(role || "").trim().toLowerCase() === "accountant";
 }
 
+function canAssignReviewers(role) {
+  return canApprove(role) || canManage(role);
+}
+
+function membershipReportLink(id) {
+  return `/dashboard/membership-reports/${id}`;
+}
+
+function shareRolePriority(role) {
+  const value = String(role || "").trim().toLowerCase();
+  if (value === "ed") return 0;
+  if (value === "chairman") return 1;
+  if (value === "accountant") return 2;
+  if (value === "membership r. supervisor") return 3;
+  if (value.includes("membership")) return 4;
+  if (value === "hr") return 5;
+  return 10;
+}
+
 function toNumber(value) {
   if (value == null || value === "") return 0;
   const amount = Number(String(value).replace(/,/g, ""));
@@ -143,8 +163,8 @@ function reportPermissions(user, row) {
     can_edit: Number(row.submitted_by) === Number(user.id) && row.status === "REVERTED",
     can_approve: canApprove(user.role) && row.status !== "APPROVED",
     can_revert: canApprove(user.role) && row.status !== "REVERTED",
-    can_assign: canApprove(user.role),
-    can_remove_reviewer: canApprove(user.role),
+    can_assign: canAssignReviewers(user.role),
+    can_remove_reviewer: canAssignReviewers(user.role),
     can_review: Boolean(reviewerRow) && reviewerRow.status !== "REVIEWED",
     reviewer_status: reviewerRow?.status || null,
   };
@@ -224,13 +244,260 @@ export const getMembershipReports = asyncHandler(async (req, res) => {
 
 function canSeeMembershipAnalytics(role) {
   const value = String(role || "").trim().toLowerCase();
+  if (value === "hr") return false;
   return (
     canManage(role) ||
-    isExactHr(role) ||
+    isAccountantRole(role) ||
     canReviewWorkflow(role) ||
     value.includes("membership")
   );
 }
+
+function canCreateMembershipReportRole(role) {
+  const value = String(role || "").trim().toLowerCase();
+  return [
+    "membership relations officer",
+    "membership_officer",
+    "membership officer",
+    "membership r. supervisor",
+  ].includes(value);
+}
+
+function buildReportSummary(reports = []) {
+  const allItems = [];
+  const allPayments = [];
+  const allCustomers = [];
+  const reportersMap = new Map();
+  const byDistrict = {};
+  const bySite = {};
+
+  for (const report of reports) {
+    const items = report.items || [];
+    const payments = report.payments || [];
+    const customers = report.customers || [];
+    allItems.push(...items);
+    allPayments.push(...payments);
+    allCustomers.push(...customers);
+
+    const reporter = report.user || report.submitter;
+    if (reporter?.id) {
+      reportersMap.set(Number(reporter.id), {
+        id: reporter.id,
+        names: reporter.names,
+        role: reporter.role,
+        signature_url: reporter.signature_url,
+        working_area: reporter.working_area,
+        location: report.location || reporter.working_area || null,
+      });
+    }
+
+    const district = String(report.location || "Unspecified").trim() || "Unspecified";
+    byDistrict[district] = (byDistrict[district] || 0) + 1;
+
+    const siteKey = reporter?.names
+      ? `${reporter.names}${reporter.working_area ? ` (${reporter.working_area})` : ""}`
+      : "Unassigned site";
+    bySite[siteKey] = (bySite[siteKey] || 0) + 1;
+  }
+
+  const normalItems = allItems.filter((row) => String(row.category || "").toUpperCase() === "NORMAL");
+  const otherItems = allItems.filter((row) => String(row.category || "").toUpperCase() === "OTHER");
+
+  const paymentTotals = {};
+  for (const method of PAYMENT_METHODS) paymentTotals[method] = 0;
+  for (const row of allPayments) {
+    const method = String(row.method || "").toUpperCase();
+    paymentTotals[method] = (paymentTotals[method] || 0) + toNumber(row.amount);
+  }
+
+  const timberGroups = {};
+  for (const row of allItems) {
+    const name = row.timber_name || "—";
+    const qty = toNumber(row.number_of_timber);
+    if (qty > 0) timberGroups[name] = (timberGroups[name] || 0) + qty;
+  }
+
+  const totalCost = allItems.reduce((sum, row) => sum + toNumber(row.total_cost), 0);
+  const totalVat = allItems.reduce((sum, row) => sum + toNumber(row.vat), 0);
+  const totalMsf = normalItems.reduce((sum, row) => sum + toNumber(row.msf), 0);
+  const totalMst = otherItems.reduce((sum, row) => sum + toNumber(row.mst), 0);
+  const totalVatMsf = normalItems.reduce((sum, row) => sum + toNumber(row.vat_and_msf), 0)
+    + otherItems.reduce((sum, row) => sum + toNumber(row.vat_and_mst), 0);
+  const totalPayments = Object.values(paymentTotals).reduce((sum, value) => sum + value, 0);
+  const totalCustomers = allCustomers.reduce((sum, row) => sum + toNumber(row.amount), 0);
+
+  return {
+    report_count: reports.length,
+    item_count: allItems.length,
+    customer_count: allCustomers.length,
+    total_timber: allItems.reduce((sum, row) => sum + toNumber(row.number_of_timber), 0),
+    total_cost: totalCost,
+    total_vat: totalVat,
+    total_msf: totalMsf,
+    total_mst: totalMst,
+    total_msf_mst: totalMsf + totalMst,
+    total_vat_msf: totalVatMsf,
+    total_payments: totalPayments,
+    total_customers: totalCustomers,
+    payments_by_method: paymentTotals,
+    timber_by_name: timberGroups,
+    by_district: byDistrict,
+    by_site: bySite,
+    reporters: [...reportersMap.values()],
+  };
+}
+
+async function buildAccessibleReportWhere(user, query = {}) {
+  const where = {};
+  const tab = query.tab || (canManage(user.role) ? "all" : "my");
+
+  if (tab === "all" && canManage(user.role)) {
+    // managers see all reports
+  } else if (tab === "review") {
+    const assigned = await db.MembershipReportReviewers.findAll({
+      where: { reviewer_id: user.id },
+      attributes: ["report_id"],
+    });
+    where.id = { [Op.in]: assigned.length ? assigned.map((row) => row.report_id) : [0] };
+  } else {
+    const assigned = await db.MembershipReportReviewers.findAll({
+      where: { reviewer_id: user.id },
+      attributes: ["report_id"],
+    });
+    const assignedIds = assigned.map((row) => row.report_id);
+    where[Op.or] = [
+      { user_id: user.id },
+      { submitted_by: user.id },
+      ...(assignedIds.length ? [{ id: { [Op.in]: assignedIds } }] : []),
+    ];
+  }
+
+  applyReportFilters(where, query);
+
+  const groupBy = String(query.group_by || "").trim().toLowerCase();
+  const siteUserId = Number(query.site_user_id || query.site || 0);
+  if (groupBy === "site" && siteUserId) {
+    where.user_id = siteUserId;
+  }
+
+  return { where, groupBy, siteUserId };
+}
+
+export const getMembershipReportPrintOptions = asyncHandler(async (req, res) => {
+  const { where } = await buildAccessibleReportWhere(req.user, {
+    ...req.query,
+    location: "",
+    site_user_id: "",
+    site: "",
+    search: "",
+    group_by: "",
+  });
+
+  const rows = await db.MembershipReports.findAll({
+    where,
+    attributes: ["id", "location", "user_id", "submitted_by"],
+    include: [
+      { model: db.Users, as: "user", attributes: ["id", "names", "role", "working_area", "signature_url"] },
+      { model: db.Users, as: "submitter", attributes: ["id", "names", "role", "working_area", "signature_url"] },
+    ],
+    order: [["created_at", "DESC"]],
+    limit: 1000,
+  });
+
+  const districts = [...new Set(rows.map((row) => row.location).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const sitesMap = new Map();
+  for (const row of rows) {
+    const reporter = row.user || row.submitter;
+    if (!reporter?.id) continue;
+    sitesMap.set(Number(reporter.id), {
+      id: reporter.id,
+      names: reporter.names,
+      role: reporter.role,
+      working_area: reporter.working_area || null,
+      label: reporter.working_area
+        ? `${reporter.names} — ${reporter.working_area}`
+        : reporter.names,
+    });
+  }
+
+  return ok(res, {
+    districts,
+    sites: [...sitesMap.values()].sort((a, b) => String(a.names).localeCompare(String(b.names))),
+  });
+});
+
+export const getMembershipReportPrintBundle = asyncHandler(async (req, res) => {
+  const groupBy = String(req.query.group_by || "district").trim().toLowerCase();
+  if (!["district", "site"].includes(groupBy)) {
+    return fail(res, "group_by must be district or site");
+  }
+
+  if (groupBy === "district" && !String(req.query.location || "").trim()) {
+    return fail(res, "Select a district to generate the report");
+  }
+  if (groupBy === "site" && !Number(req.query.site_user_id || req.query.site || 0)) {
+    return fail(res, "Select a site / officer to generate the report");
+  }
+
+  const { where } = await buildAccessibleReportWhere(req.user, { ...req.query, group_by: groupBy });
+
+  const reports = await db.MembershipReports.findAll({
+    where,
+    include: [
+      { model: db.Users, as: "user", attributes: ["id", "names", "email", "role", "signature_url", "working_area"] },
+      { model: db.Users, as: "submitter", attributes: ["id", "names", "email", "role", "signature_url", "working_area"] },
+      { model: db.Users, as: "approver", attributes: ["id", "names", "email", "role", "signature_url", "working_area"] },
+      { model: db.MembershipReportItems, as: "items" },
+      { model: db.MembershipReportPayments, as: "payments" },
+      { model: db.CustomersNoInvoice, as: "customers" },
+    ],
+    order: [["created_at", "ASC"]],
+    limit: 500,
+  });
+
+  const summary = buildReportSummary(reports);
+  const first = reports[0];
+  const siteReporter = summary.reporters[0] || null;
+
+  return ok(res, {
+    meta: {
+      group_by: groupBy,
+      location: groupBy === "district" ? String(req.query.location || "").trim() : (siteReporter?.location || null),
+      site: groupBy === "site" ? siteReporter : null,
+      report_type: req.query.report_type || null,
+      status: req.query.status || null,
+      period: {
+        start_date: req.query.start_date || null,
+        end_date: req.query.end_date || null,
+        monthly_month: req.query.monthly_month || null,
+        yearly_year: req.query.yearly_year || null,
+        quarter: req.query.quarter || null,
+      },
+      generated_at: new Date(),
+      generated_by: {
+        id: req.user.id,
+        names: req.user.names,
+        role: req.user.role,
+        signature_url: req.user.signature_url || null,
+      },
+      report_count: reports.length,
+      title: groupBy === "district"
+        ? `Membership Report by District — ${String(req.query.location || "").trim()}`
+        : `Membership Report by Site — ${siteReporter?.names || "Officer"}`,
+    },
+    summary,
+    reports,
+    sample_period: first ? {
+      report_type: first.report_type,
+      start_date: first.start_date,
+      end_date: first.end_date,
+      monthly_month: first.monthly_month,
+      yearly_year: first.yearly_year,
+      quarter: first.quarter,
+      year: first.year,
+    } : null,
+  });
+});
 
 export const getMembershipAnalytics = asyncHandler(async (req, res) => {
   if (!canSeeMembershipAnalytics(req.user.role)) return fail(res, "Access denied", 403);
@@ -243,12 +510,100 @@ export const getMembershipAnalytics = asyncHandler(async (req, res) => {
   return ok(res, await buildMembershipAnalytics(query));
 });
 
-export const getMembershipReportCoverage = asyncHandler(async (req, res) => {
-  if (!canManage(req.user.role)) return fail(res, "Access denied", 403);
+export const getMembershipReportShareUsers = asyncHandler(async (req, res) => {
+  if (!canAssignReviewers(req.user.role)) {
+    return fail(res, "You don't have permission to share membership reports", 403);
+  }
 
-  const reportType = String(req.query.report_type || "").trim().toUpperCase();
+  const executives = await db.Users.findAll({
+    where: {
+      active: 1,
+      deleted: { [Op.ne]: "1" },
+      [Op.or]: [
+        { role: { [Op.iLike]: "ed" } },
+        { role: { [Op.iLike]: "chairman" } },
+      ],
+    },
+    attributes: ["id", "names", "email", "role", "department_ID", "working_area"],
+    order: [["names", "ASC"]],
+  });
+
+  // Broader active staff list (ordered by name so early ED accounts are never truncated by newest-first limits)
+  const staff = await db.Users.findAll({
+    where: {
+      active: 1,
+      deleted: { [Op.ne]: "1" },
+      id: { [Op.ne]: req.user.id },
+      role: { [Op.notILike]: "admin" },
+    },
+    attributes: ["id", "names", "email", "role", "department_ID", "working_area"],
+    order: [["names", "ASC"]],
+    limit: 500,
+  });
+
+  const byId = new Map();
+  [...executives, ...staff].forEach((row) => {
+    byId.set(Number(row.id), row.toJSON ? row.toJSON() : row);
+  });
+
+  const items = [...byId.values()].sort((a, b) => {
+    const rank = shareRolePriority(a.role) - shareRolePriority(b.role);
+    if (rank !== 0) return rank;
+    return String(a.names || "").localeCompare(String(b.names || ""));
+  });
+
+  return ok(res, {
+    items,
+    executives: items.filter((row) => isExecutiveRole(row.role)),
+  });
+});
+
+function membershipMissedShareLink(id) {
+  return `/dashboard/membership-reports/shared-missed/${id}`;
+}
+
+async function ensureMissedSharesTable() {
+  try {
+    await db.MembershipMissedShares.sync();
+    if (db.MembershipMissedShareComments) {
+      await db.MembershipMissedShareComments.sync();
+    }
+    await db.sequelize.query(`
+      ALTER TABLE membership_missed_shares
+      ADD COLUMN IF NOT EXISTS seen_at TIMESTAMP WITH TIME ZONE
+    `);
+  } catch {
+    /* table may already exist */
+  }
+}
+
+function canAccessMissedShare(user, row) {
+  return Number(row.shared_to) === Number(user.id)
+    || Number(row.shared_by) === Number(user.id)
+    || isExecutiveRole(user.role)
+    || canManage(user.role);
+}
+
+async function loadMissedShare(id) {
+  return db.MembershipMissedShares.findByPk(id, {
+    include: [
+      { model: db.Users, as: "sharer", attributes: ["id", "names", "email", "role"] },
+      { model: db.Users, as: "recipient", attributes: ["id", "names", "email", "role"] },
+      {
+        model: db.MembershipMissedShareComments,
+        as: "comments",
+        include: [{ model: db.Users, as: "user", attributes: ["id", "names", "email", "role"] }],
+        separate: true,
+        order: [["created_at", "ASC"]],
+      },
+    ],
+  });
+}
+
+async function buildMembershipCoverage(query = {}) {
+  const reportType = String(query.report_type || "").trim().toUpperCase();
   if (!REPORT_TYPES.includes(reportType)) {
-    return fail(res, "Select a report type to see who missed reporting");
+    throw new Error("Select a report type to see who missed reporting");
   }
 
   const officers = await db.Users.findAll({
@@ -265,7 +620,7 @@ export const getMembershipReportCoverage = asyncHandler(async (req, res) => {
   });
 
   const reportWhere = {};
-  applyReportFilters(reportWhere, { ...req.query, search: "", status: "" });
+  applyReportFilters(reportWhere, { ...query, search: "", status: "" });
   const reports = await db.MembershipReports.findAll({
     where: reportWhere,
     order: [["created_at", "DESC"]],
@@ -277,7 +632,7 @@ export const getMembershipReportCoverage = asyncHandler(async (req, res) => {
     if (!latestByUser.has(userId)) latestByUser.set(userId, report);
   });
 
-  const selectedUser = req.query.user_id;
+  const selectedUser = query.user_id;
   const items = officers
     .filter((officer) => !selectedUser || Number(officer.id) === Number(selectedUser))
     .map((officer) => {
@@ -307,14 +662,301 @@ export const getMembershipReportCoverage = asyncHandler(async (req, res) => {
       };
     });
 
-  return ok(res, {
-    items,
+  const missedOnly = String(query.missed_only || "1") !== "0";
+  const visible = missedOnly ? items.filter((item) => item.missed) : items;
+
+  return {
+    items: visible,
+    all_items: items,
     summary: {
       officers: items.length,
       submitted: items.filter((item) => item.submitted).length,
       missed: items.filter((item) => item.missed).length,
     },
+    filters: {
+      report_type: reportType,
+      location: query.location || null,
+      start_date: query.start_date || null,
+      end_date: query.end_date || null,
+      monthly_month: query.monthly_month || null,
+      yearly_year: query.yearly_year || null,
+      quarter: query.quarter || null,
+    },
+  };
+}
+
+export const getMembershipReportCoverage = asyncHandler(async (req, res) => {
+  if (!canManage(req.user.role)) return fail(res, "Access denied", 403);
+  try {
+    const data = await buildMembershipCoverage({ ...req.query, missed_only: "0" });
+    return ok(res, {
+      items: data.all_items,
+      summary: data.summary,
+      filters: data.filters,
+    });
+  } catch (err) {
+    return fail(res, err.message || "Could not load coverage");
+  }
+});
+
+export const createMembershipMissedShare = asyncHandler(async (req, res) => {
+  if (!canManage(req.user.role)) return fail(res, "Access denied", 403);
+  await ensureMissedSharesTable();
+
+  const body = req.body || {};
+  const recipientIds = Array.isArray(body.shared_to_ids)
+    ? body.shared_to_ids
+    : body.shared_to
+      ? [body.shared_to]
+      : [];
+  const note = String(body.note || body.reason || "").trim();
+  if (!recipientIds.length) return fail(res, "Select ED / recipient to share with");
+  const priority = requireNotificationPriority(body);
+  if (!priority) return fail(res, "Select notification priority (Send as: Urgent / High / Middle / Low)");
+
+  let coverage;
+  try {
+    coverage = await buildMembershipCoverage({
+      ...(body.filters || body),
+      missed_only: "1",
+    });
+  } catch (err) {
+    return fail(res, err.message || "Could not build missed list");
+  }
+
+  if (!coverage.items.length) {
+    return fail(res, "No missed officers for the selected filters");
+  }
+
+  const recipients = await db.Users.findAll({
+    where: {
+      id: { [Op.in]: recipientIds.map((id) => Number(id)).filter(Boolean) },
+      active: 1,
+      deleted: { [Op.ne]: "1" },
+    },
+    attributes: ["id", "names", "email", "role"],
   });
+  if (!recipients.length) return fail(res, "No valid recipients found");
+
+  const executiveRecipients = recipients.filter((row) => isExecutiveRole(row.role));
+  if (!executiveRecipients.length) {
+    return fail(res, "Missed lists can only be shared with ED / Chairman");
+  }
+
+  const createdShares = [];
+  for (const recipient of executiveRecipients) {
+    const row = await db.MembershipMissedShares.create({
+      shared_by: req.user.id,
+      shared_to: recipient.id,
+      title: body.title || `Missed membership reports — ${coverage.filters.report_type}`,
+      note: note || null,
+      filters: coverage.filters,
+      snapshot: {
+        summary: coverage.summary,
+        items: coverage.items,
+        shared_at: new Date(),
+      },
+      link_path: "/dashboard/membership-reports/shared-missed/pending",
+      status: "PENDING",
+    });
+    const link = membershipMissedShareLink(row.id);
+    await row.update({ link_path: link });
+
+    await createNotification({
+      whatsapp: true,
+      receiverId: recipient.id,
+      type: "membership_missed_share",
+      title: `Missed reports list shared (${coverage.summary.missed} missed)`,
+      message: note || `${req.user.names} shared a filtered missed membership reports list with you.`,
+      link,
+      priority,
+      emailPayload: buildEmailPayload("membership_report", {
+        id: row.id,
+        title: row.title,
+        location: coverage.filters.location,
+        report_type: coverage.filters.report_type,
+      }, {
+        intro: `${req.user.names} shared a missed membership reports list with you.`,
+        actor: req.user,
+        note: note || `${coverage.summary.missed} officer(s) missed reporting.`,
+        actionRequired: "Open the shared missed list from this notification.",
+      }),
+    });
+
+    createdShares.push({
+      ...(row.toJSON ? row.toJSON() : row),
+      link_path: link,
+      recipient,
+    });
+  }
+
+  return created(res, {
+    items: createdShares,
+    summary: coverage.summary,
+    filters: coverage.filters,
+  }, "Missed list shared with ED");
+});
+
+export const getMembershipMissedShares = asyncHandler(async (req, res) => {
+  await ensureMissedSharesTable();
+  const tab = String(req.query.tab || "received").toLowerCase();
+  const where = {};
+
+  if (tab === "sent") {
+    // Only managers may list shares they sent; others get an empty list (no 403 on the reports page).
+    if (!canManage(req.user.role) && !isExecutiveRole(req.user.role)) {
+      return ok(res, { items: [] });
+    }
+    where.shared_by = req.user.id;
+  } else {
+    // Received lists are only for the designated recipient (typically ED).
+    where.shared_to = req.user.id;
+  }
+
+  const rows = await db.MembershipMissedShares.findAll({
+    where,
+    include: [
+      { model: db.Users, as: "sharer", attributes: ["id", "names", "email", "role"] },
+      { model: db.Users, as: "recipient", attributes: ["id", "names", "email", "role"] },
+    ],
+    order: [["created_at", "DESC"]],
+    limit: 100,
+  });
+
+  return ok(res, {
+    items: rows.map((row) => {
+      const json = row.toJSON ? row.toJSON() : row;
+      return {
+        ...json,
+        missed_count: Number(json.snapshot?.summary?.missed || json.snapshot?.items?.length || 0),
+        link_path: json.link_path || membershipMissedShareLink(json.id),
+      };
+    }),
+  });
+});
+
+export const getMembershipMissedShare = asyncHandler(async (req, res) => {
+  await ensureMissedSharesTable();
+  const row = await loadMissedShare(req.params.id);
+  if (!row) return fail(res, "Shared missed list not found", 404);
+  if (!canAccessMissedShare(req.user, row)) return fail(res, "Access denied", 403);
+
+  if (Number(row.shared_to) === Number(req.user.id) && row.status === "PENDING") {
+    await row.update({ status: "OPENED", opened_at: new Date() });
+    await row.reload({
+      include: [
+        { model: db.Users, as: "sharer", attributes: ["id", "names", "email", "role"] },
+        { model: db.Users, as: "recipient", attributes: ["id", "names", "email", "role"] },
+        {
+          model: db.MembershipMissedShareComments,
+          as: "comments",
+          include: [{ model: db.Users, as: "user", attributes: ["id", "names", "email", "role"] }],
+          separate: true,
+          order: [["created_at", "ASC"]],
+        },
+      ],
+    });
+  }
+
+  const json = row.toJSON ? row.toJSON() : row;
+  const isRecipient = Number(row.shared_to) === Number(req.user.id);
+  return ok(res, {
+    ...json,
+    link_path: json.link_path || membershipMissedShareLink(json.id),
+    items: json.snapshot?.items || [],
+    summary: json.snapshot?.summary || { officers: 0, submitted: 0, missed: 0 },
+    comments: json.comments || [],
+    permissions: {
+      can_comment: canAccessMissedShare(req.user, row),
+      can_mark_seen: isRecipient && String(row.status || "").toUpperCase() !== "SEEN",
+    },
+  });
+});
+
+export const addMembershipMissedShareComment = asyncHandler(async (req, res) => {
+  await ensureMissedSharesTable();
+  const row = await db.MembershipMissedShares.findByPk(req.params.id);
+  if (!row) return fail(res, "Shared missed list not found", 404);
+  if (!canAccessMissedShare(req.user, row)) return fail(res, "Access denied", 403);
+
+  const comment = String(req.body.comment || "").trim();
+  if (!comment) return fail(res, "comment is required");
+
+  const createdRow = await db.MembershipMissedShareComments.create({
+    share_id: row.id,
+    user_id: req.user.id,
+    comment,
+  });
+
+  const notifyId = Number(row.shared_to) === Number(req.user.id)
+    ? row.shared_by
+    : row.shared_to;
+  if (notifyId && Number(notifyId) !== Number(req.user.id)) {
+    await createNotification({
+      whatsapp: true,
+      receiverId: notifyId,
+      type: "membership_missed_share_comment",
+      title: "New comment on shared missed list",
+      message: `${req.user.names || "Someone"} commented: ${comment.slice(0, 120)}`,
+      link: membershipMissedShareLink(row.id),
+    });
+  }
+
+  const withUser = await db.MembershipMissedShareComments.findByPk(createdRow.id, {
+    include: [{ model: db.Users, as: "user", attributes: ["id", "names", "email", "role"] }],
+  });
+  return created(res, withUser, "Comment added");
+});
+
+export const markMembershipMissedShareSeen = asyncHandler(async (req, res) => {
+  await ensureMissedSharesTable();
+  const row = await db.MembershipMissedShares.findByPk(req.params.id);
+  if (!row) return fail(res, "Shared missed list not found", 404);
+  if (Number(row.shared_to) !== Number(req.user.id)) {
+    return fail(res, "Only the recipient can mark this list as seen", 403);
+  }
+
+  const note = String(req.body.note || req.body.comment || "").trim();
+  await row.update({
+    status: "SEEN",
+    seen_at: new Date(),
+    opened_at: row.opened_at || new Date(),
+  });
+
+  if (note) {
+    await db.MembershipMissedShareComments.create({
+      share_id: row.id,
+      user_id: req.user.id,
+      comment: note,
+    });
+  }
+
+  if (row.shared_by && Number(row.shared_by) !== Number(req.user.id)) {
+    await createNotification({
+      whatsapp: true,
+      receiverId: row.shared_by,
+      type: "membership_missed_share_seen",
+      title: "Shared missed list marked as seen",
+      message: note
+        ? `${req.user.names || "ED"} marked the missed list as seen: ${note.slice(0, 120)}`
+        : `${req.user.names || "ED"} marked the missed list as seen.`,
+      link: membershipMissedShareLink(row.id),
+    });
+  }
+
+  const refreshed = await loadMissedShare(row.id);
+  const json = refreshed.toJSON ? refreshed.toJSON() : refreshed;
+  return ok(res, {
+    ...json,
+    link_path: json.link_path || membershipMissedShareLink(json.id),
+    items: json.snapshot?.items || [],
+    summary: json.snapshot?.summary || { officers: 0, submitted: 0, missed: 0 },
+    comments: json.comments || [],
+    permissions: {
+      can_comment: true,
+      can_mark_seen: false,
+    },
+  }, "Marked as seen");
 });
 
 export const getMembershipReport = asyncHandler(async (req, res) => {
@@ -332,6 +974,9 @@ export const getMembershipReport = asyncHandler(async (req, res) => {
 });
 
 export const createMembershipReport = asyncHandler(async (req, res) => {
+  if (!canCreateMembershipReportRole(req.user.role)) {
+    return fail(res, "Only membership officers can create membership reports", 403);
+  }
   const body = req.body || {};
   const report_type = String(body.report_type || "").toUpperCase();
   if (!REPORT_TYPES.includes(report_type)) return fail(res, "Valid report_type is required");
@@ -452,7 +1097,7 @@ export const approveMembershipReport = asyncHandler(async (req, res) => {
       type: "membership_report_status",
       title: `Membership report #${row.id} approved`,
       message: req.body.comment || "Your membership report was approved.",
-      link: `/membership-reports/${row.id}`,
+      link: membershipReportLink(row.id),
       emailPayload: buildEmailPayload("membership_report", loaded, {
         intro: "Your membership report has been approved by the accounts team.",
         actor: req.user,
@@ -479,7 +1124,7 @@ export const revertMembershipReport = asyncHandler(async (req, res) => {
       type: "membership_report_status",
       title: `Membership report #${row.id} reverted`,
       message: comment,
-      link: `/membership-reports/${row.id}`,
+      link: membershipReportLink(row.id),
       emailPayload: buildEmailPayload("membership_report", loaded, {
         intro: "Your membership report was reverted and requires corrections before it can proceed.",
         actor: req.user,
@@ -508,7 +1153,7 @@ export const addMembershipReportComment = asyncHandler(async (req, res) => {
 export const assignMembershipReportReviewer = asyncHandler(async (req, res) => {
   const row = await db.MembershipReports.findByPk(req.params.id);
   if (!row) return fail(res, "Membership report not found", 404);
-  if (!canApprove(req.user.role)) return fail(res, "You don't have permission to assign reviewers", 403);
+  if (!canAssignReviewers(req.user.role)) return fail(res, "You don't have permission to assign reviewers", 403);
   const reviewerIds = Array.isArray(req.body.reviewer_ids)
     ? req.body.reviewer_ids
     : req.body.reviewer_id
@@ -517,13 +1162,16 @@ export const assignMembershipReportReviewer = asyncHandler(async (req, res) => {
   const reason = String(req.body.reason || req.body.assign_reason || "").trim();
   if (!reviewerIds.length) return fail(res, "reviewer_id is required");
   if (!reason) return fail(res, "Assignment reason is required");
+  const priority = requireNotificationPriority(req.body);
+  if (!priority) return fail(res, "Select notification priority (Send as: Urgent / High / Middle / Low)");
 
   for (const reviewer_id of reviewerIds) {
     const existing = await db.MembershipReportReviewers.findOne({
       where: { report_id: row.id, reviewer_id },
     });
     if (existing) continue;
-    const reviewer = await db.Users.findByPk(reviewer_id, { attributes: ["id", "names"] });
+    const reviewer = await db.Users.findByPk(reviewer_id, { attributes: ["id", "names", "role", "email"] });
+    if (!reviewer) continue;
     await db.MembershipReportReviewers.create({
       report_id: row.id,
       reviewer_id,
@@ -535,25 +1183,26 @@ export const assignMembershipReportReviewer = asyncHandler(async (req, res) => {
       row.id,
       "ASSIGNED",
       req.user.id,
-      `Assigned reviewer: ${reviewer?.names || "Unknown User"} (ID: ${reviewer_id})\nReason: ${reason}`
+      `Shared with: ${reviewer.names || "Unknown User"} (${reviewer.role || "staff"}, ID: ${reviewer_id})\nReason: ${reason}`
     );
     const loaded = await loadReport(row.id);
     await createNotification({
       whatsapp: true,
       receiverId: reviewer_id,
       type: "membership_report_assigned",
-      title: `Assigned to membership report #${row.id}`,
-      message: reason,
-      link: `/membership-reports/${row.id}`,
+      title: `Membership report #${row.id} shared with you`,
+      message: reason || `${req.user.names} shared membership report #${row.id} with you.`,
+      link: membershipReportLink(row.id),
+      priority,
       emailPayload: buildEmailPayload("membership_report", loaded, {
-        intro: `${req.user.names} has assigned you as a reviewer on membership report #${row.id}.`,
+        intro: `${req.user.names} shared membership report #${row.id} with you.`,
         actor: req.user,
         note: reason,
-        actionRequired: "Please review the membership report and submit your review comments.",
+        actionRequired: "Open the report from Shared with Me (or this notification) to review it.",
       }),
     });
   }
-  return ok(res, await loadReport(row.id), "Reviewer assigned successfully");
+  return ok(res, await loadReport(row.id), "Report shared successfully");
 });
 
 export const markMembershipReportReviewed = asyncHandler(async (req, res) => {
@@ -577,7 +1226,7 @@ export const markMembershipReportReviewed = asyncHandler(async (req, res) => {
 export const removeMembershipReportReviewer = asyncHandler(async (req, res) => {
   const row = await db.MembershipReports.findByPk(req.params.id);
   if (!row) return fail(res, "Membership report not found", 404);
-  if (!canApprove(req.user.role)) return fail(res, "Only Accountants are authorized to remove reviewers", 403);
+  if (!canAssignReviewers(req.user.role)) return fail(res, "Only authorized staff can remove shared users", 403);
   const reviewer_id = req.body.reviewer_id || req.params.reviewerId;
   const assigned = await db.MembershipReportReviewers.findOne({
     where: { report_id: row.id, reviewer_id },

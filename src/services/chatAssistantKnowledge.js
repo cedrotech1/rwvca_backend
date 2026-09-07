@@ -1,4 +1,9 @@
 import db from "../database/models/index.js";
+import {
+  PUBLIC_DOCUMENTATION_HEADER,
+  STAFF_DOCUMENTATION_HEADER,
+  SYSTEM_DOCUMENTATION,
+} from "../constants/systemDocumentation.js";
 
 const ABOUT_FACTS = {
   intro:
@@ -176,8 +181,8 @@ export async function buildPublicKnowledgePack() {
     ? String(membershipApp.application_link)
     : "";
 
-  return `
-## RWVCA website knowledge pack (authoritative — use this; do not invent facts)
+  const liveSnapshot = `
+## Live CMS snapshot (prefer these facts over sample day data)
 
 ### Who we are
 - Full name: Rwanda Wood Value Chain Association (RWVCA)
@@ -218,5 +223,37 @@ ${lineList(productLines, "Member products appear on the Members Products page wh
 
 ### Organization structure (high level)
 ${lineList(orgLines, "RWVCA is governed through its General Assembly, Executive Committee, Permanent Secretariat, and support organs — see About Us.")}
+`.trim();
+
+  return `${PUBLIC_DOCUMENTATION_HEADER}
+
+${SYSTEM_DOCUMENTATION}
+
+${liveSnapshot}`;
+}
+
+/**
+ * Staff MIS documentation + optional thin live hints.
+ * Loaded first so IGITI answers match real menus and workflows.
+ */
+export async function buildStaffKnowledgePack(user = {}) {
+  const name = user.names || user.name || user.full_name || user.email || "Staff member";
+  const role = user.role || "staff";
+  const pending =
+    Number(user.active) !== 1 && Number(user.force_deactivated) !== 1
+      ? "Account is pending profile completion — guide them to Account / Profile only until activated."
+      : Number(user.force_deactivated) === 1
+        ? "Account was force-deactivated by a manager — they should contact HR (they cannot use the MIS)."
+        : "Account is active.";
+
+  return `${STAFF_DOCUMENTATION_HEADER}
+
+${SYSTEM_DOCUMENTATION}
+
+## Current signed-in staff context
+- Name: ${name}
+- Role: ${role}
+- Account note: ${pending}
+- Always tailor menu steps to what this role can typically access.
 `.trim();
 }

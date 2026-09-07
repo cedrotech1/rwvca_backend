@@ -58,7 +58,12 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(255),
         allowNull: true,
         defaultValue: null,
-      }
+      },
+      priority: {
+        type: DataTypes.STRING(20),
+        allowNull: false,
+        defaultValue: "middle",
+      },
     },
     {
       sequelize,

@@ -29,6 +29,8 @@ module.exports = (sequelize, DataTypes) => {
       Users.hasMany(models.MembershipReportLogs, { foreignKey: "user_id", as: "membership_report_logs_user_id" });
       Users.hasMany(models.MembershipReportReviewers, { foreignKey: "reviewer_id", as: "membership_report_reviewers" });
       Users.hasMany(models.MembershipReportReviewers, { foreignKey: "assigned_by", as: "membership_report_reviewer_assignments" });
+      Users.hasMany(models.MembershipMissedShares, { foreignKey: "shared_by", as: "membership_missed_shares_sent" });
+      Users.hasMany(models.MembershipMissedShares, { foreignKey: "shared_to", as: "membership_missed_shares_received" });
       Users.hasMany(models.MembershipReports, { foreignKey: "user_id", as: "membership_reports_user_id" });
       Users.hasMany(models.MembershipReports, { foreignKey: "submitted_by", as: "membership_reports_submitted_by" });
       Users.hasMany(models.MembershipReports, { foreignKey: "approved_by", as: "membership_reports_approved_by" });

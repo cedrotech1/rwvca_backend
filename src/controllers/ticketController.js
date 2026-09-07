@@ -6,6 +6,7 @@ import { getPagination, paginationMeta } from "../utils/pagination.js";
 import { createLog } from "../services/logService.js";
 import { createNotification } from "../services/notificationService.js";
 import { buildEmailPayload } from "../services/emailNotificationHelpers.js";
+import { normalizeNotificationPriority } from "../utils/notificationPriority.js";
 import fileStorage from "../utils/fileStorage.js";
 import { isAdminRole, isExactHr } from "../utils/roleHelpers.js";
 
@@ -137,7 +138,11 @@ export const getTicket = asyncHandler(async (req, res) => {
 export const createTicket = asyncHandler(async (req, res) => {
   const { title, description } = req.body || {};
   if (!title || !description) return fail(res, "title and description are required");
-  const priority = PRIORITIES.includes(req.body.priority) ? req.body.priority : "medium";
+  const priority = PRIORITIES.includes(req.body.priority)
+    ? req.body.priority
+    : String(req.body.priority || "").toLowerCase() === "middle"
+      ? "medium"
+      : "medium";
   let saved = null;
   try {
     saved = saveRequestFile(req, "tickets", { prefix: "ticket", fieldNames: ["attachment", "file"] });
@@ -171,6 +176,7 @@ export const createTicket = asyncHandler(async (req, res) => {
       title: `New Ticket Assigned: ${title}`,
       message: `You have been assigned to ticket #${row.id}: ${String(description).slice(0, 100)}...`,
       link: `/tickets/${row.id}`,
+      priority: normalizeNotificationPriority(priority),
       emailPayload: buildEmailPayload("ticket", loaded, {
         intro: `${req.user.names} has assigned you to a new support ticket.`,
         actor: req.user,
@@ -184,6 +190,7 @@ export const createTicket = asyncHandler(async (req, res) => {
       title: `New Ticket Created: ${title}`,
       message: `A new ticket #${row.id} has been created and needs assignment`,
       link: `/tickets/${row.id}`,
+      priority: normalizeNotificationPriority(priority),
       emailPayload: buildEmailPayload("ticket", loaded, {
         intro: `${req.user.names} has opened a new support ticket that requires assignment.`,
         actor: req.user,
@@ -197,6 +204,7 @@ export const createTicket = asyncHandler(async (req, res) => {
     type: "ticket_created",
     title: `Ticket Created: ${title}`,
     message: `Your ticket #${row.id} has been created successfully`,
+    priority: normalizeNotificationPriority(priority),
     link: `/tickets/${row.id}`,
     emailPayload: buildEmailPayload("ticket", loaded, {
       intro: "Your support ticket has been submitted successfully. You will be notified when there are updates.",

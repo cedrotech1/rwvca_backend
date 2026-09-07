@@ -3,6 +3,7 @@ import db from "../database/models/index.js";
 import { ok, fail, created } from "../utils/apiResponse.js";
 import { createNotification } from "../services/notificationService.js";
 import { buildEmailPayload } from "../services/emailNotificationHelpers.js";
+import { requireNotificationPriority } from "../utils/notificationPriority.js";
 import { isEdRole, isAdminRole } from "../utils/roleHelpers.js";
 
 const commentInclude = [
@@ -83,6 +84,8 @@ export const createEdNote = asyncHandler(async (req, res) => {
   }
   const recipientIds = Array.isArray(req.body.recipient_ids) ? req.body.recipient_ids : [];
   if (!recipientIds.length) return fail(res, "recipient_ids is required");
+  const priority = requireNotificationPriority(req.body);
+  if (!priority) return fail(res, "Select notification priority (Send as: Urgent / High / Middle / Low)");
 
   const row = await db.EdModuleComments.create({
     module_type: req.body.module_type,
@@ -108,6 +111,7 @@ export const createEdNote = asyncHandler(async (req, res) => {
         title: "New ED note",
         message: req.body.message.slice(0, 160),
         link: `/ed-notes/${row.id}`,
+        priority,
         emailPayload: buildEmailPayload("ed_note", {
           id: row.id,
           title: `${row.module_type} #${row.record_id}`,

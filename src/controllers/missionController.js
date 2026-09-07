@@ -6,6 +6,7 @@ import { getPagination, paginationMeta } from "../utils/pagination.js";
 import { createLog } from "../services/logService.js";
 import { createNotification } from "../services/notificationService.js";
 import { buildEmailPayload } from "../services/emailNotificationHelpers.js";
+import { requireNotificationPriority } from "../utils/notificationPriority.js";
 import { getApproverForApplicant, hasSignature, normalizeEdStampChoice, USER_PUBLIC } from "../services/workflowUsers.js";
 import {
   isAdminRole,
@@ -240,6 +241,7 @@ export const createMission = asyncHandler(async (req, res) => {
   await createLog(req.user.id, "create_mission", `Created mission request #${row.id}`);
 
   const link = `/missions/${row.id}`;
+  const priority = requireNotificationPriority(req.body) || "middle";
   if (officers.direct) {
     await createNotification({
       whatsapp: true,
@@ -248,6 +250,7 @@ export const createMission = asyncHandler(async (req, res) => {
       title: `Mission Request #${row.id} – Your Approval Required`,
       message: `${req.user.names} submitted a mission request. Please approve or reject.`,
       link,
+      priority,
       emailPayload: buildEmailPayload("mission", row, {
         intro: `${req.user.names} has submitted a mission request that requires your direct approval as Executive Director / Chairman.`,
         actor: req.user,
@@ -262,6 +265,7 @@ export const createMission = asyncHandler(async (req, res) => {
       title: `New Mission Request #${row.id}`,
       message: `${req.user.names} submitted mission request #${row.id} to ${destination}.`,
       link,
+      priority,
       emailPayload: buildEmailPayload("mission", row, {
         intro: `${req.user.names} has submitted a new mission request for HR verification.`,
         actor: req.user,
@@ -320,6 +324,7 @@ export const updateMission = asyncHandler(async (req, res) => {
       title: `Mission Request #${row.id} - Edited`,
       message: `Mission request by ${row.user?.names || "applicant"} has been edited and requires your review.`,
       link: `/missions/${row.id}`,
+      priority: requireNotificationPriority(req.body) || "middle",
       emailPayload: buildEmailPayload("mission", row, {
         intro: `The mission request below was edited by ${req.user.names} and needs HR review again.`,
         actor: req.user,
@@ -373,6 +378,7 @@ export const verifyMissionByHr = asyncHandler(async (req, res) => {
       title: `Mission Request #${row.id} – Awaiting Your Approval`,
       message: `HR verified a mission request by ${applicant}.`,
       link,
+      priority: requireNotificationPriority(req.body) || "middle",
       emailPayload: buildEmailPayload("mission", row, {
         intro: `HR has verified the mission request submitted by ${applicant}. Your approval is now required.`,
         actor: req.user,
@@ -431,6 +437,7 @@ export const approveMission = asyncHandler(async (req, res) => {
     title: `Mission Request #${row.id} approved`,
     message: "Your mission request has been approved.",
     link,
+      priority: requireNotificationPriority(req.body) || "middle",
     emailPayload: buildEmailPayload("mission", row, {
       intro: "Your mission request has received final approval. You may proceed with the authorized mission.",
       actor: req.user,
@@ -445,6 +452,7 @@ export const approveMission = asyncHandler(async (req, res) => {
       title: `Mission Request #${row.id} fully approved`,
       message: `Request #${row.id} was approved by ${req.user.names}.`,
       link,
+      priority: requireNotificationPriority(req.body) || "middle",
       emailPayload: buildEmailPayload("mission", row, {
         intro: `Mission request #${row.id} has been fully approved by ${req.user.names}.`,
         actor: req.user,
@@ -476,6 +484,7 @@ export const rejectMission = asyncHandler(async (req, res) => {
       title: `Mission Request #${row.id} rejected`,
       message: reason ? `Your mission request was rejected. Reason: ${reason}` : "Your mission request was rejected.",
       link: `/missions/${row.id}`,
+      priority: requireNotificationPriority(req.body) || "middle",
       emailPayload: buildEmailPayload("mission", row, {
         intro: "Your mission request was rejected. See the comment below for more information.",
         actor: req.user,

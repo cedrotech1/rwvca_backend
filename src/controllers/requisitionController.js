@@ -6,6 +6,7 @@ import { getPagination, paginationMeta } from "../utils/pagination.js";
 import { createLog } from "../services/logService.js";
 import { createNotification } from "../services/notificationService.js";
 import { buildEmailPayload } from "../services/emailNotificationHelpers.js";
+import { requireNotificationPriority } from "../utils/notificationPriority.js";
 import { USER_PUBLIC } from "../services/workflowUsers.js";
 import {
   isAdminRole,
@@ -103,6 +104,9 @@ async function loadRequisition(id) {
 }
 
 export const getRequisitionAnalytics = asyncHandler(async (req, res) => {
+  if (String(req.user.role || "").trim().toLowerCase() === "hr") {
+    return fail(res, "Access denied", 403);
+  }
   const canOrg = canReviewWorkflow(req.user.role) || isAccountantRole(req.user.role);
   if (!canOrg && String(req.query.scope) === "org") return fail(res, "Access denied", 403);
   const query = { ...req.query };
@@ -222,6 +226,7 @@ export const createRequisition = asyncHandler(async (req, res) => {
 
   if (action === "pending" && sended_to) {
     const loaded = await loadRequisition(row.id);
+    const priority = requireNotificationPriority(req.body) || "middle";
     await createNotification({
       whatsapp: true,
       receiverId: sended_to,
@@ -229,6 +234,7 @@ export const createRequisition = asyncHandler(async (req, res) => {
       title: `Requisition #${row.id} submitted for verification`,
       message: `${req.user.names} submitted a requisition of ${total}.`,
       link: `/requisitions/${row.id}`,
+      priority,
       emailPayload: buildEmailPayload("requisition", loaded, {
         intro: `${req.user.names} has submitted a requisition that requires your verification.`,
         actor: req.user,
@@ -327,6 +333,7 @@ export const updateRequisitionStatus = asyncHandler(async (req, res) => {
     title: `Requisition #${row.id} ${statusLabel}`,
     message: reason || comment || `Requisition #${row.id} is now ${statusLabel}.`,
     link: `/requisitions/${row.id}`,
+      priority: requireNotificationPriority(req.body) || "middle",
     emailPayload: buildEmailPayload("requisition", loaded, {
       intro: needsAction
         ? `Requisition #${row.id} requires your attention — status is now "${statusLabel}".`
@@ -362,6 +369,7 @@ export const authorizeRequisition = asyncHandler(async (req, res) => {
       title: `Requisition #${row.id} authorized`,
       message: "The Executive Director authorized this requisition.",
       link: `/requisitions/${row.id}`,
+      priority: requireNotificationPriority(req.body) || "middle",
       emailPayload: buildEmailPayload("requisition", loaded, {
         intro: "Your requisition has been authorized by the Executive Director and may proceed to finance processing.",
         actor: req.user,

@@ -6,6 +6,7 @@ import { getPagination, paginationMeta } from "../utils/pagination.js";
 import { createLog } from "../services/logService.js";
 import { createNotification } from "../services/notificationService.js";
 import { buildEmailPayload, fmtDate } from "../services/emailNotificationHelpers.js";
+import { requireNotificationPriority } from "../utils/notificationPriority.js";
 import { canManageUsers } from "../utils/roleHelpers.js";
 
 async function loadAttendance(id) {
@@ -61,6 +62,8 @@ export const createAttendanceSession = asyncHandler(async (req, res) => {
   });
   const userIds = Array.isArray(req.body.user_ids) ? req.body.user_ids : [];
   if (userIds.length) {
+    const priority = requireNotificationPriority(req.body);
+    if (!priority) return fail(res, "Select notification priority (Send as: Urgent / High / Middle / Low)");
     await db.AttendanceUsers.bulkCreate(
       userIds.map((user_id) => ({ attendance_id: row.id, user_id, signed: 0 }))
     );
@@ -73,6 +76,7 @@ export const createAttendanceSession = asyncHandler(async (req, res) => {
           title: "Attendance required",
           message: `Please sign attendance for '${row.title}'.`,
           link: `/attendance/${row.id}`,
+          priority,
           emailPayload: buildEmailPayload("attendance", row, {
             intro: `${req.user.names} has added you to an attendance session that requires your signature.`,
             actor: req.user,

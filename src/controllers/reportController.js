@@ -7,6 +7,7 @@ import { getPagination, paginationMeta } from "../utils/pagination.js";
 import { createLog } from "../services/logService.js";
 import { createNotification } from "../services/notificationService.js";
 import { buildEmailPayload } from "../services/emailNotificationHelpers.js";
+import { requireNotificationPriority } from "../utils/notificationPriority.js";
 import { isAdminRole, isExecutiveRole } from "../utils/roleHelpers.js";
 import fileStorage from "../utils/fileStorage.js";
 
@@ -55,7 +56,13 @@ async function canAccessReport(user, report) {
   return Boolean(recipient);
 }
 
-async function notifyReportRecipients({ report, sender, recipientIds, titlePrefix = "New Report Shared" }) {
+async function notifyReportRecipients({
+  report,
+  sender,
+  recipientIds,
+  titlePrefix = "New Report Shared",
+  priority = "middle",
+}) {
   const link = `/reports/${report.id}?tab=shared`;
   await Promise.all(
     recipientIds.map((receiverId) =>
@@ -66,6 +73,7 @@ async function notifyReportRecipients({ report, sender, recipientIds, titlePrefi
         title: `${titlePrefix}: ${report.title}`,
         message: `A new ${report.type} report titled '${report.title}' has been assigned to you for review.`,
         link,
+        priority,
         emailPayload: buildEmailPayload("report", report, {
           intro: `${sender.names} has shared a ${report.type} report with you for review.`,
           actor: sender,
@@ -304,6 +312,8 @@ export const createReport = asyncHandler(async (req, res) => {
 
   const recipientIds = parseRecipientIds(req.body).filter((id) => id !== req.user.id);
   if (recipientIds.length) {
+    const priority = requireNotificationPriority(req.body);
+    if (!priority) return fail(res, "Select notification priority (Send as: Urgent / High / Middle / Low)");
     await db.ReportRecipient.bulkCreate(
       recipientIds.map((recipient_id) => ({
         report_id: report.id,
@@ -312,7 +322,13 @@ export const createReport = asyncHandler(async (req, res) => {
         assigned_at: new Date(),
       }))
     );
-    await notifyReportRecipients({ report, sender: req.user, recipientIds, titlePrefix: "New Report Shared" });
+    await notifyReportRecipients({
+      report,
+      sender: req.user,
+      recipientIds,
+      titlePrefix: "New Report Shared",
+      priority,
+    });
   }
 
   const uploads = saveRequestFiles(req, "reports", {
