@@ -1,0 +1,50 @@
+{
+  "missing": [
+    {
+      "table": "tickets",
+      "id": 16,
+      "path": "WhatsApp Image 2026-02-10 at 16.04.22.jpeg"
+    },
+    {
+      "table": "tickets",
+      "id": 17,
+      "path": "Errors.png"
+    },
+    {
+      "table": "tickets",
+      "id": 23,
+      "path": "GAATSIBO MONTHLY REPORT FOR FEBRUARY 2026.pdf"
+    },
+    {
+      "table": "ticket_replies",
+      "id": 34,
+      "path": "Errors.jpg"
+    }
+  ],
+  "fixed": [
+    {
+      "table": "tickets",
+      "id": 16,
+      "path": "1770733040_e3dd9fc2ec0b65b2.jpeg",
+      "from": "C:\\Users\\HUAWEI\\Desktop\\rwvca-platform\\dashboard1\\uploads\\tickets\\1770733040_e3dd9fc2ec0b65b2.jpeg"
+    },
+    {
+      "table": "tickets",
+      "id": 17,
+      "path": "1770884142_e692e3eefcd10570.png",
+      "from": "C:\\Users\\HUAWEI\\Desktop\\rwvca-platform\\dashboard1\\uploads\\tickets\\1770884142_e692e3eefcd10570.png"
+    },
+    {
+      "table": "tickets",
+      "id": 23,
+      "path": "1772879711_81c4d0687e15f9ab.pdf",
+      "from": "C:\\Users\\HUAWEI\\Desktop\\rwvca-platform\\dashboard1\\uploads\\tickets\\1772879711_81c4d0687e15f9ab.pdf"
+    },
+    {
+      "table": "ticket_replies",
+      "id": 34,
+      "path": "1770885881_2b62e6bcec6c76c1.jpg",
+      "from": "C:\\Users\\HUAWEI\\Desktop\\rwvca-platform\\dashboard1\\uploads\\tickets\\1770885881_2b62e6bcec6c76c1.jpg"
+    }
+  ]
+}

@@ -118,7 +118,7 @@ const publicSummary = copyNamedSubfolders(publicUploads, backendRoot);
 for (const [folder, count] of Object.entries(publicSummary)) {
   console.log(`  uploads/${folder}: ${count} files`);
 }
-
+// c
 console.log("\nCopying dashboard1/uploads folders…");
 const dashSummary = copyNamedSubfolders(dashUploads, backendRoot);
 for (const [folder, count] of Object.entries(dashSummary)) {
