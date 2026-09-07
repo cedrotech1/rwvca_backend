@@ -129,5 +129,8 @@ dist
 .yarn/install-state.gz
 .pnp.*
 
-# Uploads directory - ignore uploaded files
-uploads/
+# Keep synced PHP/platform uploads in git for deploy.
+# Ignore only transient/local scratch files under uploads.
+uploads/tmp/
+uploads/**/.DS_Store
+uploads/**/Thumbs.db
