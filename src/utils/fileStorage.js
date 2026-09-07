@@ -73,15 +73,33 @@ function resolveUploadFilePath(storedPath) {
   const withoutUploads = relative.replace(/^uploads\//i, "");
   const backendRoot = backendUploadsRoot();
   const phpRoot = phpProjectRoot();
+  const baseName = path.basename(withoutUploads);
+  // Legacy PHP often stored `uploads/filename.ext` while files now live under
+  // uploads/documents/ (or another typed folder). Also try basename lookup.
+  const typedFolders = [
+    "documents",
+    "reports",
+    "communications",
+    "tickets",
+    "leave_attachments",
+    "leave_letters",
+    "requisitions",
+    "procurement",
+    "signatures",
+    "profiles",
+  ];
 
   const candidates = [
     path.join(backendRoot, withoutUploads),
     path.join(backendRoot, relative),
+    ...typedFolders.map((folder) => path.join(backendRoot, folder, baseName)),
     path.join(phpRoot, "uploads", withoutUploads),
     path.join(phpRoot, relative),
     path.join(phpRoot, "dashboard1", relative),
     path.join(phpRoot, "dashboard1", "uploads", withoutUploads),
     path.join(phpRoot, "dashboard1", withoutUploads),
+    ...typedFolders.map((folder) => path.join(phpRoot, "uploads", folder, baseName)),
+    ...typedFolders.map((folder) => path.join(phpRoot, "dashboard1", "uploads", folder, baseName)),
   ];
 
   for (const candidate of candidates) {
