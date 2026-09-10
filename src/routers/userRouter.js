@@ -15,6 +15,7 @@ import {
   getUserLeaveDays,
   saveUserLeaveDays,
   deleteUserLeaveDays,
+  adminResetPassword,
 } from "../controllers/userController.js";
 import { protect } from "../middlewares/protect.js";
 import { requireUserManager } from "../middlewares/roleAccess.js";
@@ -29,6 +30,7 @@ router.get("/:id/analysis", protect, getEmployeeAnalysis);
 router.get("/:id/leave-days", protect, getUserLeaveDays);
 router.post("/:id/leave-days", protect, requireUserManager, saveUserLeaveDays);
 router.delete("/:id/leave-days/:leaveId", protect, requireUserManager, deleteUserLeaveDays);
+router.post("/:id/reset-password", protect, requireUserManager, adminResetPassword);
 router.get("/:id", protect, getOneUser);
 router.post("/", protect, requireUserManager, addUser);
 router.put("/:id", protect, updateUser);

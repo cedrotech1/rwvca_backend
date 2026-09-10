@@ -37,6 +37,14 @@ class Email {
     return Boolean(host && user && pass);
   }
 
+  static sendgridConfigured() {
+    return Boolean(String(process.env.SENDGRID_API_KEY || "").trim());
+  }
+
+  static mailConfigured() {
+    return Email.sendgridConfigured() || Email.smtpConfigured();
+  }
+
   createTransport() {
     const smtpHost = process.env.SMTP_HOST || DEFAULT_SMTP.host;
     const smtpPort = parseInt(process.env.SMTP_PORT, 10) || DEFAULT_SMTP.port;
@@ -76,7 +84,7 @@ class Email {
   async isEmailAllowed({ forceSend = false } = {}) {
     if (forceSend) return true;
     if (process.env.EMAIL_ENABLED === "false") return false;
-    if (!Email.smtpConfigured()) return false;
+    if (!Email.mailConfigured()) return false;
 
     const cache = Email._emailSettingsCache;
     if (cache.value !== null && Date.now() - cache.at < 60000) {
@@ -122,9 +130,60 @@ class Email {
     };
   }
 
-  async sendStrict(template, subject, title, { forceSend = false } = {}) {
+  async sendViaSendGrid({ to, from, subject, text, html }) {
+    const sgMail = require("@sendgrid/mail");
+    sgMail.setApiKey(String(process.env.SENDGRID_API_KEY).trim());
+    await sgMail.send({
+      to,
+      from: {
+        email: from.address,
+        name: from.name,
+      },
+      subject,
+      text,
+      html,
+    });
+  }
+
+  async deliverMail({ subject, title, html }) {
+    const from = this.buildFromAddress();
+    const text = `${title || subject}\n\nCode: ${this.url || ""}`.trim();
+    const payload = { to: this.to, from, subject, text, html };
+
+    // Prefer SendGrid HTTP API on hosts that block SMTP (e.g. Render free tier).
+    if (Email.sendgridConfigured()) {
+      console.log(`SENDING EMAIL via SendGrid to ${this.to}: ${subject}`);
+      await this.sendViaSendGrid(payload);
+      console.log(`Email sent successfully to ${this.to} (SendGrid)`);
+      return "sendgrid";
+    }
+
     if (!Email.smtpConfigured()) {
-      const error = new Error("SMTP is not configured. Set SMTP_HOST, SMTP_USER, and SMTP_PASSWORD in BACKEND/.env (same as PHP send_email_function.php).");
+      const error = new Error(
+        "No email transport configured. Set SENDGRID_API_KEY (recommended on Render) or SMTP_HOST/SMTP_USER/SMTP_PASSWORD."
+      );
+      error.status = 400;
+      throw error;
+    }
+
+    console.log(`SENDING EMAIL via SMTP to ${this.to}: ${subject}`);
+    const transporter = this.createTransport();
+    await transporter.sendMail({
+      to: this.to,
+      from,
+      subject,
+      text,
+      html,
+    });
+    console.log(`Email sent successfully to ${this.to} (SMTP)`);
+    return "smtp";
+  }
+
+  async sendStrict(template, subject, title, { forceSend = false } = {}) {
+    if (!Email.mailConfigured()) {
+      const error = new Error(
+        "Email is not configured. On Render free tier SMTP ports are blocked — set SENDGRID_API_KEY, or upgrade Render and set SMTP_*."
+      );
       error.status = 400;
       throw error;
     }
@@ -136,17 +195,8 @@ class Email {
       throw error;
     }
 
-    const transporter = this.createTransport();
     const html = await this.renderTemplate(template, title || subject);
-
-    await transporter.sendMail({
-      to: this.to,
-      from: this.buildFromAddress(),
-      subject,
-      text: `${title || subject}\n\nCode: ${this.url || ""}`.trim(),
-      html,
-    });
-    console.log(`Email sent successfully to ${this.to}`);
+    await this.deliverMail({ subject, title, html });
   }
 
   async send(template, subject, title, { forceSend = false } = {}) {
@@ -156,38 +206,14 @@ class Email {
       return;
     }
 
-    if (!Email.smtpConfigured()) {
-      console.error(`SMTP not configured - Skipping email to ${this.to}: ${subject}`);
+    if (!Email.mailConfigured()) {
+      console.error(`Email not configured - Skipping email to ${this.to}: ${subject}`);
       return;
     }
 
-    console.log(`SENDING EMAIL to ${this.to}: ${subject}`);
-
     try {
-      const transporter = this.createTransport();
       const html = await this.renderTemplate(template, title || subject);
-      const noReply = process.env.EMAIL_NO_REPLY === "true";
-      const replyTo = process.env.EMAIL_REPLY_TO || "";
-
-      const mailOptions = {
-        to: this.to,
-        from: this.buildFromAddress(),
-        subject,
-        text: title || subject,
-        html,
-      };
-
-      if (noReply && replyTo) {
-        mailOptions.replyTo = { name: "Do Not Reply", address: replyTo };
-        mailOptions.headers = {
-          "X-Auto-Response-Suppress": "All",
-          Precedence: "bulk",
-          "Auto-Submitted": "auto-generated",
-        };
-      }
-
-      await transporter.sendMail(mailOptions);
-      console.log(`Email sent successfully to ${this.to}`);
+      await this.deliverMail({ subject, title, html });
     } catch (error) {
       console.error(`Email failed to send to ${this.to}:`, error.message);
     }

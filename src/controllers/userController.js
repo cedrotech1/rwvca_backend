@@ -5,13 +5,31 @@ import { ok, fail, created } from "../utils/apiResponse.js";
 import { getPagination, paginationMeta } from "../utils/pagination.js";
 import { hashPassword, generatePassword } from "../utils/password.js";
 import { createLog } from "../services/logService.js";
-import { canManageUsers, canReviewWorkflow } from "../utils/roleHelpers.js";
+import { canManageUsers, canReviewWorkflow, isAdminRole } from "../utils/roleHelpers.js";
 import { createNotification, notifyStaff } from "../services/notificationService.js";
 import { buildEmailPayload } from "../services/emailNotificationHelpers.js";
 import { buildEmployeeAnalysis, buildEmployeesOverview } from "../services/employeeAnalysisService.js";
+import Email from "../utils/mailer.js";
 
 const Users = db.Users;
 const USER_SAFE = { exclude: ["password", "resetcode"] };
+
+function normalizeRole(role) {
+  return String(role || "").trim().toLowerCase();
+}
+
+function assertCanAssignRole(actorRole, targetCurrentRole, nextRole) {
+  const next = normalizeRole(nextRole);
+  const current = normalizeRole(targetCurrentRole);
+  if (!next) return null;
+  if (isAdminRole(current) && !isAdminRole(actorRole)) {
+    return "Only an administrator can edit admin accounts";
+  }
+  if (next === "admin" && !isAdminRole(actorRole)) {
+    return "Only an administrator can grant Admin access";
+  }
+  return null;
+}
 
 function deletedWhere(showDeleted) {
   return showDeleted ? { deleted: "1" } : { deleted: { [Op.ne]: "1" } };
@@ -113,6 +131,9 @@ export const addUser = asyncHandler(async (req, res) => {
   }
   if (!body.department_ID) return fail(res, "Department is required");
 
+  const roleError = assertCanAssignRole(req.user.role, null, body.role);
+  if (roleError) return fail(res, roleError, 403);
+
   const exists = await Users.findOne({
     where: db.sequelize.where(
       db.sequelize.fn("lower", db.sequelize.col("email")),
@@ -205,12 +226,20 @@ export const updateUser = asyncHandler(async (req, res) => {
     delete body.force_deactivated;
     delete body.department_ID;
     delete body.deleted;
-  } else if (body.active !== undefined) {
-    if (Number(body.active) === 1) {
-      body.force_deactivated = 0;
-    } else {
-      body.active = 0;
-      body.force_deactivated = 1;
+  } else {
+    if (body.role !== undefined) {
+      const roleError = assertCanAssignRole(req.user.role, user.role, body.role);
+      if (roleError) return fail(res, roleError, 403);
+    } else if (isAdminRole(user.role) && !isAdminRole(req.user.role)) {
+      return fail(res, "Only an administrator can edit admin accounts", 403);
+    }
+    if (body.active !== undefined) {
+      if (Number(body.active) === 1) {
+        body.force_deactivated = 0;
+      } else {
+        body.active = 0;
+        body.force_deactivated = 1;
+      }
     }
   }
 
@@ -389,4 +418,71 @@ export const deleteUserLeaveDays = asyncHandler(async (req, res) => {
   if (!row) return fail(res, "Leave days record not found", 404);
   await row.destroy();
   return ok(res, null, "Leave days removed");
+});
+
+export const adminResetPassword = asyncHandler(async (req, res) => {
+  if (!canManageUsers(req.user.role)) return fail(res, "Access denied", 403);
+
+  const user = await Users.findByPk(req.params.id);
+  if (!user || String(user.deleted) === "1") return fail(res, "User not found", 404);
+
+  if (isAdminRole(user.role) && !isAdminRole(req.user.role)) {
+    return fail(res, "Only an administrator can reset an admin account password", 403);
+  }
+
+  const requested = String(req.body?.password || "").trim();
+  if (requested && requested.length < 6) {
+    return fail(res, "Password must be at least 6 characters");
+  }
+  const plainPassword = requested || generatePassword();
+
+  await user.update({
+    password: await hashPassword(plainPassword),
+    resetcode: null,
+  });
+  await createLog(req.user.id, "admin_reset_password", `Reset password for user #${user.id} (${user.email})`);
+
+  let emailed = false;
+  try {
+    const mailer = new Email(
+      { email: user.email, names: user.names, password: plainPassword },
+      {
+        message:
+          "An administrator reset your RWVCA portal password. Use the temporary password below to sign in, then change it from Profile settings.",
+      },
+      `${process.env.FRONTEND_URL || "https://rwvca-frontend.vercel.app"}/login`
+    );
+    mailer.setEmailPayload({
+      intro: "An administrator reset your RWVCA portal password.",
+      details: [
+        { label: "Email", value: user.email },
+        { label: "Temporary password", value: plainPassword },
+      ],
+      actionRequired: "Sign in with this temporary password, then change it in Profile settings.",
+    });
+    await mailer.sendStrict("Notification", "Your RWVCA password was reset", "Password reset", {
+      forceSend: true,
+    });
+    emailed = true;
+  } catch (error) {
+    console.error("Admin reset password email failed:", error.message);
+  }
+
+  await createNotification({
+    receiverId: user.id,
+    type: "user_updated",
+    title: "Your password was reset",
+    message: "An administrator reset your password. Check your email for a temporary password, or contact HR if you did not receive it.",
+    link: "/login",
+    email: false,
+    whatsapp: false,
+  });
+
+  return ok(
+    res,
+    { id: user.id, email: user.email, generated_password: plainPassword, emailed },
+    emailed
+      ? "Password reset and emailed to the user. Temporary password is also shown once below."
+      : "Password reset. Email could not be sent — copy the temporary password and share it securely."
+  );
 });

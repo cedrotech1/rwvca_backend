@@ -141,7 +141,14 @@ export const forgotPassword = asyncHandler(async (req, res) => {
       });
     } catch (error) {
       console.error("Reset email failed:", error.message);
-      return fail(res, "Could not send the reset code email. Please try again in a moment.", 503);
+      const hint = /timeout|ETIMEDOUT|ECONNREFUSED|ENETUNREACH|blocked|587|465/i.test(String(error.message || ""))
+        ? " Render free plans block SMTP ports — use SENDGRID_API_KEY or a paid Render instance."
+        : "";
+      return fail(
+        res,
+        `Could not send the reset code email${hint ? `.${hint}` : ". Please try again in a moment."}`,
+        503
+      );
     }
   }
 
