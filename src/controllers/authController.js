@@ -132,12 +132,14 @@ export const forgotPassword = asyncHandler(async (req, res) => {
   if (user) {
     const code = generateResetCode();
     await user.update({ resetcode: Number(code) });
-    try {
+    // Send email in the background so slow SMTP / cold starts don't time out the client.
+    setImmediate(() => {
       const mailer = new Email(user, null, code);
-      await mailer.send("ResetPasswordCode", "Password Reset Code - RWVCA", "Password Reset");
-    } catch (error) {
-      console.error("Reset email failed:", error.message);
-    }
+      // forceSend: password reset must go out even if general email notifications are off
+      mailer
+        .send("ResetPasswordCode", "Password Reset Code - RWVCA", "Password Reset", { forceSend: true })
+        .catch((error) => console.error("Reset email failed:", error.message));
+    });
   }
 
   return ok(res, null, generic);
