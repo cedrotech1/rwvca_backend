@@ -431,10 +431,16 @@ export const adminResetPassword = asyncHandler(async (req, res) => {
   }
 
   const requested = String(req.body?.password || "").trim();
-  if (requested && requested.length < 6) {
+  if (!requested) {
+    return fail(res, "Enter the new password to set for this user");
+  }
+  if (requested.length < 6) {
     return fail(res, "Password must be at least 6 characters");
   }
-  const plainPassword = requested || generatePassword();
+  const plainPassword = requested;
+  const shouldEmail = String(req.body?.email ?? req.body?.notify_email ?? "0") === "1"
+    || req.body?.email === true
+    || req.body?.notify_email === true;
 
   await user.update({
     password: await hashPassword(plainPassword),
@@ -443,36 +449,38 @@ export const adminResetPassword = asyncHandler(async (req, res) => {
   await createLog(req.user.id, "admin_reset_password", `Reset password for user #${user.id} (${user.email})`);
 
   let emailed = false;
-  try {
-    const mailer = new Email(
-      { email: user.email, names: user.names, password: plainPassword },
-      {
-        message:
-          "An administrator reset your RWVCA portal password. Use the temporary password below to sign in, then change it from Profile settings.",
-      },
-      `${process.env.FRONTEND_URL || "https://rwvca-frontend.vercel.app"}/login`
-    );
-    mailer.setEmailPayload({
-      intro: "An administrator reset your RWVCA portal password.",
-      details: [
-        { label: "Email", value: user.email },
-        { label: "Temporary password", value: plainPassword },
-      ],
-      actionRequired: "Sign in with this temporary password, then change it in Profile settings.",
-    });
-    await mailer.sendStrict("Notification", "Your RWVCA password was reset", "Password reset", {
-      forceSend: true,
-    });
-    emailed = true;
-  } catch (error) {
-    console.error("Admin reset password email failed:", error.message);
+  if (shouldEmail) {
+    try {
+      const mailer = new Email(
+        { email: user.email, names: user.names, password: plainPassword },
+        {
+          message:
+            "An administrator set a new password for your RWVCA portal account. Use the password below to sign in, then change it from Profile settings.",
+        },
+        `${process.env.FRONTEND_URL || "https://rwvca-frontend.vercel.app"}/login`
+      );
+      mailer.setEmailPayload({
+        intro: "An administrator set a new password for your RWVCA portal account.",
+        details: [
+          { label: "Email", value: user.email },
+          { label: "New password", value: plainPassword },
+        ],
+        actionRequired: "Sign in with this password, then change it in Profile settings.",
+      });
+      await mailer.sendStrict("Notification", "Your RWVCA password was updated", "Password updated", {
+        forceSend: true,
+      });
+      emailed = true;
+    } catch (error) {
+      console.error("Admin reset password email failed:", error.message);
+    }
   }
 
   await createNotification({
     receiverId: user.id,
     type: "user_updated",
-    title: "Your password was reset",
-    message: "An administrator reset your password. Check your email for a temporary password, or contact HR if you did not receive it.",
+    title: "Your password was updated",
+    message: "An administrator set a new password for your account. Contact HR if you did not request this.",
     link: "/login",
     email: false,
     whatsapp: false,
@@ -480,9 +488,9 @@ export const adminResetPassword = asyncHandler(async (req, res) => {
 
   return ok(
     res,
-    { id: user.id, email: user.email, generated_password: plainPassword, emailed },
+    { id: user.id, email: user.email, password: plainPassword, emailed },
     emailed
-      ? "Password reset and emailed to the user. Temporary password is also shown once below."
-      : "Password reset. Email could not be sent — copy the temporary password and share it securely."
+      ? "New password saved and emailed to the user."
+      : "New password saved. Share it with the user directly."
   );
 });
