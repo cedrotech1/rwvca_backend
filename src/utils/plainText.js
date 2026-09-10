@@ -10,7 +10,7 @@ const ENTITY_MAP = {
 /**
  * Strip Word/Outlook paste junk and HTML so notifications stay plain text.
  */
-export function toPlainText(value) {
+function toPlainText(value) {
   if (value === undefined || value === null) return "";
   if (typeof value !== "string") return String(value);
 
@@ -45,10 +45,15 @@ export function toPlainText(value) {
     .trim();
 }
 
-export function sanitizeNotificationRow(row) {
+function sanitizeNotificationRow(row) {
   if (!row) return row;
   const data = typeof row.toJSON === "function" ? row.toJSON() : { ...row };
   if (data.title != null) data.title = toPlainText(data.title);
   if (data.message != null) data.message = toPlainText(data.message);
   return data;
 }
+
+module.exports = {
+  toPlainText,
+  sanitizeNotificationRow,
+};

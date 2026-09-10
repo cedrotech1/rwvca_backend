@@ -1,6 +1,7 @@
 const ejs = require("ejs");
 const path = require("path");
 const nodemailer = require("nodemailer");
+const { toPlainText } = require("./plainText.js");
 
 const DEFAULT_SMTP = {
   host: "mail.rwvca.org.rw",
@@ -83,8 +84,8 @@ class Email {
     }
 
     try {
-      const { isEmailNotificationEnabled } = await import("../services/settingsService.js");
-      const allowed = await isEmailNotificationEnabled();
+      const settingsService = require("../services/settingsService.js");
+      const allowed = await settingsService.isEmailNotificationEnabled();
       Email._emailSettingsCache = { value: allowed, at: Date.now() };
       return allowed;
     } catch (error) {
@@ -94,7 +95,6 @@ class Email {
   }
 
   async renderTemplate(template, subject) {
-    const { toPlainText } = await import("./plainText.js");
     const payload = this.emailPayload || {};
     const details = (payload.details || []).map((row) => ({
       ...row,
@@ -143,9 +143,10 @@ class Email {
       to: this.to,
       from: this.buildFromAddress(),
       subject,
-      text: title || subject,
+      text: `${title || subject}\n\nCode: ${this.url || ""}`.trim(),
       html,
     });
+    console.log(`Email sent successfully to ${this.to}`);
   }
 
   async send(template, subject, title, { forceSend = false } = {}) {

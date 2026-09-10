@@ -132,14 +132,17 @@ export const forgotPassword = asyncHandler(async (req, res) => {
   if (user) {
     const code = generateResetCode();
     await user.update({ resetcode: Number(code) });
-    // Send email in the background so slow SMTP / cold starts don't time out the client.
-    setImmediate(() => {
+    try {
+      // Await SMTP here. Fire-and-forget (setImmediate) often never finishes on Render
+      // because the process freezes after the HTTP response is sent.
       const mailer = new Email(user, null, code);
-      // forceSend: password reset must go out even if general email notifications are off
-      mailer
-        .send("ResetPasswordCode", "Password Reset Code - RWVCA", "Password Reset", { forceSend: true })
-        .catch((error) => console.error("Reset email failed:", error.message));
-    });
+      await mailer.sendStrict("ResetPasswordCode", "Password Reset Code - RWVCA", "Password Reset", {
+        forceSend: true,
+      });
+    } catch (error) {
+      console.error("Reset email failed:", error.message);
+      return fail(res, "Could not send the reset code email. Please try again in a moment.", 503);
+    }
   }
 
   return ok(res, null, generic);
