@@ -16,7 +16,8 @@
     "migrate:prod": "cross-env NODE_ENV=production npx sequelize-cli db:migrate",
     "import:data": "node scripts/import-mysql-dump.js",
     "seed": "node scripts/import-mysql-dump.js",
-    "sync:uploads": "node scripts/sync-php-uploads.js"
+    "sync:uploads": "node scripts/sync-php-uploads.js",
+    "test:email": "node scripts/test-email.js"
   },
   "author": "",
   "license": "ISC",
