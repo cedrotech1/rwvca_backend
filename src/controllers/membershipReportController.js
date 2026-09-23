@@ -159,10 +159,16 @@ async function loadReport(id) {
 
 function reportPermissions(user, row) {
   const reviewerRow = (row.reviewers || []).find((item) => Number(item.reviewer_id) === Number(user.id));
+  const isOwner =
+    Number(row.user_id) === Number(user.id) || Number(row.submitted_by) === Number(user.id);
+  const status = String(row.status || "").toUpperCase();
+  const canEdit =
+    canManage(user.role) ||
+    (isOwner && status !== "APPROVED");
   return {
-    can_edit: Number(row.submitted_by) === Number(user.id) && row.status === "REVERTED",
-    can_approve: canApprove(user.role) && row.status !== "APPROVED",
-    can_revert: canApprove(user.role) && row.status !== "REVERTED",
+    can_edit: canEdit,
+    can_approve: canApprove(user.role) && status !== "APPROVED",
+    can_revert: canApprove(user.role) && status !== "REVERTED",
     can_assign: canAssignReviewers(user.role),
     can_remove_reviewer: canAssignReviewers(user.role),
     can_review: Boolean(reviewerRow) && reviewerRow.status !== "REVIEWED",
@@ -235,7 +241,10 @@ export const getMembershipReports = asyncHandler(async (req, res) => {
   ]);
 
   return ok(res, {
-    items: rows,
+    items: rows.map((row) => ({
+      ...row.toJSON(),
+      permissions: reportPermissions(req.user, row),
+    })),
     pagination: paginationMeta(count, page, limit),
     stats: { total: count, this_week: thisWeek, this_month: thisMonth, this_year: thisYear },
     can_view_coverage: canManage(req.user.role),
@@ -1060,22 +1069,97 @@ export const createMembershipReport = asyncHandler(async (req, res) => {
 export const updateMembershipReport = asyncHandler(async (req, res) => {
   const row = await db.MembershipReports.findByPk(req.params.id);
   if (!row) return fail(res, "Membership report not found", 404);
-  if (Number(row.submitted_by) !== Number(req.user.id) && !canManage(req.user.role)) {
-    return fail(res, "Access denied", 403);
+
+  const isOwner =
+    Number(row.user_id) === Number(req.user.id) || Number(row.submitted_by) === Number(req.user.id);
+  const manager = canManage(req.user.role);
+  if (!isOwner && !manager) return fail(res, "Access denied", 403);
+
+  const status = String(row.status || "").toUpperCase();
+  if (!manager && status === "APPROVED") {
+    return fail(res, "Approved reports cannot be edited. Ask accounts to revert it first.");
   }
-  if (row.status !== "REVERTED" && !canManage(req.user.role)) {
-    return fail(res, "Only reverted reports can be edited");
-  }
+
   const body = req.body || {};
+  const report_type = String(body.report_type || row.report_type || "").toUpperCase();
+  if (body.report_type && !REPORT_TYPES.includes(report_type)) {
+    return fail(res, "Valid report_type is required");
+  }
+  if (body.comment !== undefined && !String(body.comment || "").trim()) {
+    return fail(res, "Comment/Remarks is required");
+  }
+
   await row.update({
+    report_type: body.report_type ? report_type : row.report_type,
     title: body.title !== undefined ? body.title : row.title,
     comment: body.comment !== undefined ? body.comment : row.comment,
     location: body.location !== undefined ? body.location : row.location,
     start_date: body.start_date || row.start_date,
     end_date: body.end_date || row.end_date,
+    year: body.year || row.year,
+    month: body.month !== undefined ? body.month : row.month,
+    quarter: body.quarter !== undefined ? (body.quarter != null ? String(body.quarter) : null) : row.quarter,
+    week: body.week !== undefined ? body.week : row.week,
+    monthly_month: body.monthly_month !== undefined ? body.monthly_month : row.monthly_month,
+    yearly_year: body.yearly_year !== undefined ? body.yearly_year : row.yearly_year,
     status: "PENDING",
+    approved_by: null,
+    approved_at: null,
   });
-  await addMrLog(row.id, "UPDATED", req.user.id, body.comment || "Report updated and resubmitted");
+
+  if (Array.isArray(body.items) || Array.isArray(body.timber_items)) {
+    const items = Array.isArray(body.items) ? body.items : body.timber_items;
+    await db.MembershipReportItems.destroy({ where: { report_id: row.id } });
+    if (items.length) {
+      await db.MembershipReportItems.bulkCreate(
+        items.map((item) => ({
+          report_id: row.id,
+          timber_name: item.timber_name || null,
+          category: String(item.category || "NORMAL").toUpperCase(),
+          number_of_timber: toNumber(item.number_of_timber),
+          price: toNumber(item.price),
+          total_cost: toNumber(item.total_cost),
+          vat: toNumber(item.vat),
+          msf: toNumber(item.msf),
+          mst: toNumber(item.mst),
+          vat_and_msf: toNumber(item.vat_and_msf),
+          vat_and_mst: toNumber(item.vat_and_mst),
+        }))
+      );
+    }
+  }
+
+  if (Array.isArray(body.payments)) {
+    await db.MembershipReportPayments.destroy({ where: { report_id: row.id } });
+    await db.MembershipReportPayments.bulkCreate(
+      PAYMENT_METHODS.map((method) => {
+        const found = body.payments.find((payment) => String(payment.method || "").toUpperCase() === method);
+        return { report_id: row.id, method, amount: toNumber(found?.amount) };
+      })
+    );
+  }
+
+  if (Array.isArray(body.customers)) {
+    await db.CustomersNoInvoice.destroy({ where: { report_id: row.id } });
+    if (body.customers.length) {
+      await db.CustomersNoInvoice.bulkCreate(
+        body.customers.map((customer) => ({
+          report_id: row.id,
+          name: customer.name || null,
+          phone: customer.phone || null,
+          amount: customer.amount || null,
+        }))
+      );
+    }
+  }
+
+  await addMrLog(
+    row.id,
+    "UPDATED",
+    req.user.id,
+    String(body.comment || row.comment || "Report updated").slice(0, 200)
+  );
+  await createLog(req.user.id, "update_membership_report", `Updated membership report #${row.id}`);
   return ok(res, await loadReport(row.id), "Membership report updated");
 });
 
