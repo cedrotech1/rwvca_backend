@@ -75,6 +75,7 @@ web_modules/
 # dotenv environment variable files
 # .env stays on disk locally and is set in the cPanel App Env tab.
 .env
+.env copy
 .env.development.local
 .env.test.local
 .env.production.local
