@@ -25,6 +25,7 @@ function getRequestHost(req) {
 }
 
 function originMatchesAllowed(origin, allowed) {
+  if (allowed === '*') return true;
   if (origin === allowed || origin.startsWith(`${allowed}/`)) {
     return true;
   }
