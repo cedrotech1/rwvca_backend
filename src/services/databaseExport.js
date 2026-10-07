@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { QueryTypes } from "sequelize";
 
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -60,7 +61,8 @@ async function listColumns(sequelize, table) {
 
 export async function writeDatabaseSql(sequelize, output) {
   const tables = await listTables(sequelize);
-  output.write(`-- RWVCA PostgreSQL export\n`);
+  const databaseName = sequelize.config?.database || "rwvca";
+  output.write(`-- PostgreSQL database dump of ${databaseName}\n`);
   output.write(`-- Generated ${new Date().toISOString()}\n`);
   output.write(`BEGIN;\n\n`);
 
@@ -71,7 +73,6 @@ export async function writeDatabaseSql(sequelize, output) {
     const columnList = columns.map((column) => quoteIdent(column.column_name)).join(", ");
     const qualified = quoteIdent(name);
     let offset = 0;
-    let exported = 0;
 
     for (;;) {
       const rows = await sequelize.query(
@@ -84,14 +85,98 @@ export async function writeDatabaseSql(sequelize, output) {
           .map((column) => sqlLiteral(row[column.column_name], column.udt_name))
           .join(", ");
         output.write(`INSERT INTO ${qualified} (${columnList}) VALUES (${values});\n`);
-        exported += 1;
       }
       if (rows.length < BATCH) break;
       offset += BATCH;
     }
-
-    output.write(`-- ${name}: ${exported} row(s)\n\n`);
   }
 
   output.write(`COMMIT;\n`);
+}
+
+function spawnPgDump(sequelize) {
+  const cfg = sequelize.config || {};
+  const ssl = Boolean(sequelize.options?.dialectOptions?.ssl);
+  return spawn(
+    "pg_dump",
+    [
+      "--host", cfg.host || "localhost",
+      "--port", String(cfg.port || 5432),
+      "--username", cfg.username || "",
+      "--dbname", cfg.database || "",
+      "--no-owner",
+      "--no-privileges",
+      "--format=p",
+      "--encoding=UTF8",
+    ],
+    {
+      env: {
+        ...process.env,
+        PGPASSWORD: cfg.password || "",
+        PGSSLMODE: ssl ? "require" : process.env.PGSSLMODE || "prefer",
+      },
+    }
+  );
+}
+
+export function sendDatabaseDump(sequelize, res, filename) {
+  return new Promise((resolve, reject) => {
+    let child;
+    try {
+      child = spawnPgDump(sequelize);
+    } catch (error) {
+      reject(error);
+      return;
+    }
+
+    let started = false;
+    let settled = false;
+    let stderr = "";
+
+    const begin = () => {
+      if (started) return;
+      started = true;
+      res.setHeader("Content-Type", "application/sql; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    };
+
+    const finishWithSql = () => {
+      if (settled) return;
+      settled = true;
+      begin();
+      writeDatabaseSql(sequelize, res).then(() => {
+        res.end();
+        resolve();
+      }).catch(reject);
+    };
+
+    child.stdout.on("data", (chunk) => {
+      begin();
+      res.write(chunk);
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", (error) => {
+      if (error.code === "ENOENT") {
+        finishWithSql();
+        return;
+      }
+      if (settled) return;
+      settled = true;
+      if (started) res.end();
+      reject(error);
+    });
+    child.on("close", (code) => {
+      if (settled) return;
+      if (!started) {
+        finishWithSql();
+        return;
+      }
+      settled = true;
+      res.end();
+      if (code === 0) resolve();
+      else reject(new Error(stderr.trim() || "Database export failed"));
+    });
+  });
 }
