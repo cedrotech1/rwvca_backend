@@ -4,6 +4,8 @@ import { ok, fail } from "../utils/apiResponse.js";
 import { createLog } from "../services/logService.js";
 import { isAdminRole } from "../utils/roleHelpers.js";
 import Email from "../utils/mailer.js";
+import db from "../database/models/index.js";
+import { writeDatabaseSql } from "../services/databaseExport.js";
 
 export const getSystemSettings = asyncHandler(async (req, res) => {
   const settings = await getSettings();
@@ -78,4 +80,20 @@ export const sendTestEmail = asyncHandler(async (req, res) => {
   }
   await createLog(req.user.id, "test_email", `Sent test email to ${to}`);
   return ok(res, { to }, `Test email sent to ${to}`);
+});
+
+export const exportDatabase = asyncHandler(async (req, res) => {
+  if (!isAdminRole(req.user.role)) return fail(res, "Access denied", 403);
+  const stamp = new Date().toISOString().slice(0, 10);
+  const filename = `rwvca-database-${stamp}.sql`;
+  res.setHeader("Content-Type", "application/sql; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  try {
+    await writeDatabaseSql(db.sequelize, res);
+    res.end();
+    await createLog(req.user.id, "export_database", `Exported database to ${filename}`);
+  } catch (error) {
+    if (!res.headersSent) return fail(res, error.message || "Could not export database", 500);
+    res.end();
+  }
 });
