@@ -49,7 +49,7 @@ export function createWebsiteRouter(modelName, options = {}) {
     const where = {};
     const search = String(req.query.search || "").trim();
     if (search && searchFields.length) {
-      where[Op.or] = searchFields.map((field) => ({ [field]: { [Op.iLike]: `%${search}%` } }));
+      where[Op.or] = searchFields.map((field) => ({ [field]: { [Op.like]: `%${search}%` } }));
     }
     if (req.query.status && statusField) where[statusField] = req.query.status;
     const { rows, count } = await Model.findAndCountAll({

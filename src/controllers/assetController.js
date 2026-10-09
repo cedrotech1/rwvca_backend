@@ -102,7 +102,7 @@ export const getAssets = asyncHandler(async (req, res) => {
   if (req.query.asset_type_id || req.query.asset_type) where.asset_type_id = req.query.asset_type_id || req.query.asset_type;
   if (req.query.location) where.location = req.query.location;
   if (req.query.department) {
-    where["$user.department.name$"] = { [Op.iLike]: `%${String(req.query.department).trim()}%` };
+    where["$user.department.name$"] = { [Op.like]: `%${String(req.query.department).trim()}%` };
   }
   if (!isLogistics) {
     where.user_id = req.user.id;
@@ -110,7 +110,7 @@ export const getAssets = asyncHandler(async (req, res) => {
     where.user_id = req.query.user_id;
   }
   if (search) {
-    const searchLike = { [Op.iLike]: `%${search}%` };
+    const searchLike = { [Op.like]: `%${search}%` };
     switch (searchType) {
       case "user":
         where["$user.names$"] = searchLike;

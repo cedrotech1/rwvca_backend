@@ -15,7 +15,7 @@ router.get("/", protect, asyncHandler(async (req, res) => {
   const where = {};
   const search = String(req.query.search || "").trim();
   if (search) {
-    where[Op.or] = [{ name: { [Op.iLike]: `%${search}%` } }];
+    where[Op.or] = [{ name: { [Op.like]: `%${search}%` } }];
   }
   const { rows, count } = await db.AssetTypes.findAndCountAll({
     where,

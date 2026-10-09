@@ -36,7 +36,7 @@ function visibilityWhere(user) {
   return {
     [Op.or]: [
       { created_by: user.id },
-      { users: { [Op.iLike]: `%${id}%` } },
+      { users: { [Op.like]: `%${id}%` } },
     ],
   };
 }
@@ -102,7 +102,7 @@ export const getCommunications = asyncHandler(async (req, res) => {
     where.created_by = req.user.id;
   } else if (tab === "received") {
     where.created_by = { [Op.ne]: req.user.id };
-    where.users = { [Op.iLike]: `%${req.user.id}%` };
+    where.users = { [Op.like]: `%${req.user.id}%` };
   } else if (!hasFullAccess(req.user.role)) {
     Object.assign(where, visibilityWhere(req.user));
   }
@@ -125,8 +125,8 @@ export const getCommunications = asyncHandler(async (req, res) => {
       ...(where[Op.and] || []),
       {
         [Op.or]: [
-          { title: { [Op.iLike]: `%${search}%` } },
-          { description: { [Op.iLike]: `%${search}%` } },
+          { title: { [Op.like]: `%${search}%` } },
+          { description: { [Op.like]: `%${search}%` } },
         ],
       },
     ];

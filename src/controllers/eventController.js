@@ -14,7 +14,7 @@ export const getEvents = asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req);
   const where = {};
   if (req.query.status) where.status = req.query.status;
-  if (req.query.search) where.title = { [Op.iLike]: `%${req.query.search}%` };
+  if (req.query.search) where.title = { [Op.like]: `%${req.query.search}%` };
   const { rows, count } = await db.Events.findAndCountAll({
     where,
     include: eventInclude,

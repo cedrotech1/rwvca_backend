@@ -1,5 +1,6 @@
 import { Op } from "sequelize";
 import db from "../database/models/index.js";
+import { monthExpr } from "../utils/sqlDialect.js";
 import { buildLeaveAnalytics } from "./leaveAnalyticsService.js";
 import { getLeaveBalance } from "./leaveBalanceService.js";
 
@@ -94,14 +95,15 @@ async function recentRows(model, where, attributes, extra = {}) {
 
 async function monthlyTrend(model, where, from, to) {
   try {
+    const month = monthExpr(sequelize);
     const rows = await model.findAll({
       attributes: [
-        [sequelize.fn("date_trunc", "month", sequelize.col("created_at")), "month"],
+        [month, "month"],
         [sequelize.fn("count", sequelize.col("id")), "count"],
       ],
       where: { ...where, created_at: { [Op.between]: [from, to] } },
-      group: [sequelize.fn("date_trunc", "month", sequelize.col("created_at"))],
-      order: [[sequelize.fn("date_trunc", "month", sequelize.col("created_at")), "ASC"]],
+      group: [month],
+      order: [[month, "ASC"]],
       raw: true,
     });
     return rows.map((row) => ({ month: row.month, count: Number(row.count || 0) }));
@@ -202,10 +204,10 @@ export async function buildEmployeesOverview(query = {}) {
   if (roleFilter) where.role = roleFilter;
   if (search) {
     where[Op.or] = [
-      { names: { [Op.iLike]: `%${search}%` } },
-      { email: { [Op.iLike]: `%${search}%` } },
-      { phone: { [Op.iLike]: `%${search}%` } },
-      { role: { [Op.iLike]: `%${search}%` } },
+      { names: { [Op.like]: `%${search}%` } },
+      { email: { [Op.like]: `%${search}%` } },
+      { phone: { [Op.like]: `%${search}%` } },
+      { role: { [Op.like]: `%${search}%` } },
     ];
   }
 
@@ -335,7 +337,7 @@ export async function buildEmployeeAnalysis(userId, query = {}) {
     countSafe(db.Communications, {
       ...ranged,
       communication_type: "general",
-      users: { [Op.iLike]: `%${userId}%` },
+      users: { [Op.like]: `%${userId}%` },
     }),
     db.UserAllowedDays.findAll({
       where: { user_id: userId },

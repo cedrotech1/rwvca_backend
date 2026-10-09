@@ -127,9 +127,9 @@ export const getMissions = asyncHandler(async (req, res) => {
       ...(where[Op.and] || []),
       {
         [Op.or]: [
-          { destination: { [Op.iLike]: `%${search}%` } },
-          { purpose: { [Op.iLike]: `%${search}%` } },
-          { "$user.names$": { [Op.iLike]: `%${search}%` } },
+          { destination: { [Op.like]: `%${search}%` } },
+          { purpose: { [Op.like]: `%${search}%` } },
+          { "$user.names$": { [Op.like]: `%${search}%` } },
         ],
       },
     ];

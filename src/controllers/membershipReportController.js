@@ -76,7 +76,7 @@ function applyReportFilters(where, query = {}) {
       }
   }
 
-  if (search) where.title = { [Op.iLike]: `%${search}%` };
+  if (search) where.title = { [Op.like]: `%${search}%` };
   return where;
 }
 
@@ -529,8 +529,8 @@ export const getMembershipReportShareUsers = asyncHandler(async (req, res) => {
       active: 1,
       deleted: { [Op.ne]: "1" },
       [Op.or]: [
-        { role: { [Op.iLike]: "ed" } },
-        { role: { [Op.iLike]: "chairman" } },
+        { role: { [Op.like]: "ed" } },
+        { role: { [Op.like]: "chairman" } },
       ],
     },
     attributes: ["id", "names", "email", "role", "department_ID", "working_area"],
@@ -577,10 +577,23 @@ async function ensureMissedSharesTable() {
     if (db.MembershipMissedShareComments) {
       await db.MembershipMissedShareComments.sync();
     }
-    await db.sequelize.query(`
-      ALTER TABLE membership_missed_shares
-      ADD COLUMN IF NOT EXISTS seen_at TIMESTAMP WITH TIME ZONE
-    `);
+    if (db.sequelize.getDialect() === "mysql") {
+      const [columns] = await db.sequelize.query(`
+        SELECT COLUMN_NAME AS name
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'membership_missed_shares'
+          AND COLUMN_NAME = 'seen_at'
+      `);
+      if (!columns.length) {
+        await db.sequelize.query("ALTER TABLE membership_missed_shares ADD COLUMN seen_at DATETIME NULL");
+      }
+    } else {
+      await db.sequelize.query(`
+        ALTER TABLE membership_missed_shares
+        ADD COLUMN IF NOT EXISTS seen_at TIMESTAMP WITH TIME ZONE
+      `);
+    }
   } catch {
     /* table may already exist */
   }
@@ -619,9 +632,9 @@ async function buildMembershipCoverage(query = {}) {
     where: {
       active: 1,
       [Op.or]: [
-        { role: { [Op.iLike]: "membership relations officer" } },
-        { role: { [Op.iLike]: "membership_officer" } },
-        { role: { [Op.iLike]: "membership officer" } },
+        { role: { [Op.like]: "membership relations officer" } },
+        { role: { [Op.like]: "membership_officer" } },
+        { role: { [Op.like]: "membership officer" } },
       ],
     },
     attributes: ["id", "names", "email", "role", "working_area"],

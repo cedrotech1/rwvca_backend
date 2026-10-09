@@ -140,9 +140,9 @@ export const getDocuments = asyncHandler(async (req, res) => {
       ...(where[Op.and] || []),
       {
         [Op.or]: [
-          { title: { [Op.iLike]: `%${search}%` } },
-          { description: { [Op.iLike]: `%${search}%` } },
-          { type: { [Op.iLike]: `%${search}%` } },
+          { title: { [Op.like]: `%${search}%` } },
+          { description: { [Op.like]: `%${search}%` } },
+          { type: { [Op.like]: `%${search}%` } },
         ],
       },
     ];

@@ -157,8 +157,8 @@ export const getLeaveRequests = asyncHandler(async (req, res) => {
       ...(where[Op.and] || []),
       {
         [Op.or]: [
-          { leave_type: { [Op.iLike]: `%${search}%` } },
-          { "$user.names$": { [Op.iLike]: `%${search}%` } },
+          { leave_type: { [Op.like]: `%${search}%` } },
+          { "$user.names$": { [Op.like]: `%${search}%` } },
         ],
       },
     ];

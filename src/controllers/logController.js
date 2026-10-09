@@ -58,13 +58,13 @@ function buildWhere(req) {
   const search = String(req.query.search || req.query.activity || "").trim();
   if (search) {
     where[Op.or] = [
-      { action: { [Op.iLike]: `%${search}%` } },
-      { description: { [Op.iLike]: `%${search}%` } },
+      { action: { [Op.like]: `%${search}%` } },
+      { description: { [Op.like]: `%${search}%` } },
     ];
   }
 
   const action = String(req.query.action || "").trim();
-  if (action) where.action = { [Op.iLike]: `%${action}%` };
+  if (action) where.action = { [Op.like]: `%${action}%` };
 
   if (req.query.exactDate) {
     where.created_at = {

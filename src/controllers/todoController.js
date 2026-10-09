@@ -66,7 +66,7 @@ export const getTodos = asyncHandler(async (req, res) => {
   if (req.query.search) {
     where[Op.and] = [
       ...(where[Op.and] || []),
-      { [Op.or]: [{ title: { [Op.iLike]: `%${req.query.search}%` } }, { description: { [Op.iLike]: `%${req.query.search}%` } }] },
+      { [Op.or]: [{ title: { [Op.like]: `%${req.query.search}%` } }, { description: { [Op.like]: `%${req.query.search}%` } }] },
     ];
   }
 

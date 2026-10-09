@@ -32,7 +32,7 @@ export function createCrudRouter(modelName, options = {}) {
     const search = String(req.query.search || "").trim();
     if (search && searchFields.length) {
       where[Op.or] = searchFields.map((field) => ({
-        [field]: { [Op.iLike]: `%${search}%` },
+        [field]: { [Op.like]: `%${search}%` },
       }));
     }
     if (req.query.status) where.status = req.query.status;

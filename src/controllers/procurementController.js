@@ -113,13 +113,13 @@ export const getProcurements = asyncHandler(async (req, res) => {
   const where = {};
   const search = toPlainText(req.query.search);
   if (req.query.status) where.status = req.query.status;
-  if (req.query.category) where.category = { [Op.iLike]: `%${req.query.category}%` };
+  if (req.query.category) where.category = { [Op.like]: `%${req.query.category}%` };
   if (search) {
     where[Op.or] = [
-      { title: { [Op.iLike]: `%${search}%` } },
-      { reference_no: { [Op.iLike]: `%${search}%` } },
-      { supplier_name: { [Op.iLike]: `%${search}%` } },
-      { description: { [Op.iLike]: `%${search}%` } },
+      { title: { [Op.like]: `%${search}%` } },
+      { reference_no: { [Op.like]: `%${search}%` } },
+      { supplier_name: { [Op.like]: `%${search}%` } },
+      { description: { [Op.like]: `%${search}%` } },
     ];
   }
 

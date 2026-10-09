@@ -130,9 +130,9 @@ export const getRequisitions = asyncHandler(async (req, res) => {
     if (String(req.user.role || "").trim().toLowerCase() === "assistant to ed") {
       where.total_amount_requested = { [Op.lt]: 100000 };
     }
-    if (tab === "finance_pending") where.finance_status = { [Op.iLike]: "pending" };
-    if (tab === "finance_paid") where.finance_status = { [Op.iLike]: "paid" };
-    if (tab === "finance_rejected") where.finance_status = { [Op.iLike]: "%reject%" };
+    if (tab === "finance_pending") where.finance_status = { [Op.like]: "pending" };
+    if (tab === "finance_paid") where.finance_status = { [Op.like]: "paid" };
+    if (tab === "finance_rejected") where.finance_status = { [Op.like]: "%reject%" };
   } else if (tab === "all" && (isAdminRole(req.user.role) || isExactHr(req.user.role) || isExecutiveRole(req.user.role))) {
     // organization-wide list for HR / ED / admin only
   } else {
@@ -152,9 +152,9 @@ export const getRequisitions = asyncHandler(async (req, res) => {
       ...(where[Op.and] || []),
       {
         [Op.or]: [
-          { account_code: { [Op.iLike]: `%${search}%` } },
-          { budget_source: { [Op.iLike]: `%${search}%` } },
-          { amount_in_words: { [Op.iLike]: `%${search}%` } },
+          { account_code: { [Op.like]: `%${search}%` } },
+          { budget_source: { [Op.like]: `%${search}%` } },
+          { amount_in_words: { [Op.like]: `%${search}%` } },
         ],
       },
     ];

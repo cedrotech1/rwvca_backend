@@ -2,6 +2,7 @@ import { Op } from "sequelize";
 import asyncHandler from "express-async-handler";
 import db from "../database/models/index.js";
 import { ok } from "../utils/apiResponse.js";
+import { monthExpr } from "../utils/sqlDialect.js";
 import {
   isAdminRole,
   isAccountantRole,
@@ -292,14 +293,15 @@ async function sumAmount(model, where, field = "total_amount_requested") {
 
 async function monthlyTrend(model, where, from, to) {
   try {
+    const month = monthExpr(sequelize);
     const rows = await model.findAll({
       attributes: [
-        [sequelize.fn("date_trunc", "month", sequelize.col("created_at")), "month"],
+        [month, "month"],
         [sequelize.fn("count", sequelize.col("id")), "count"],
       ],
       where: { ...where, created_at: { [Op.between]: [from, to] } },
-      group: [sequelize.fn("date_trunc", "month", sequelize.col("created_at"))],
-      order: [[sequelize.fn("date_trunc", "month", sequelize.col("created_at")), "ASC"]],
+      group: [month],
+      order: [[month, "ASC"]],
       raw: true,
     });
     return rows.map((row) => ({
@@ -459,8 +461,8 @@ export const getDashboardOverview = asyncHandler(async (req, res) => {
     statusBreakdown(db.Requisitions, financeWhere, "finance_status"),
     sumAmount(db.Requisitions, financeWhere),
     countSafe(db.Users, { deleted: { [Op.ne]: "1" } }),
-    countSafe(db.Users, { deleted: { [Op.ne]: "1" }, gender: { [Op.iLike]: "male" } }),
-    countSafe(db.Users, { deleted: { [Op.ne]: "1" }, gender: { [Op.iLike]: "female" } }),
+    countSafe(db.Users, { deleted: { [Op.ne]: "1" }, gender: { [Op.like]: "male" } }),
+    countSafe(db.Users, { deleted: { [Op.ne]: "1" }, gender: { [Op.like]: "female" } }),
     countSafe(db.Users, { deleted: { [Op.ne]: "1" }, active: 1 }),
     countSafe(db.Users, { deleted: { [Op.ne]: "1" }, signature_approved: "1" }),
     countSafe(db.Members, {}),

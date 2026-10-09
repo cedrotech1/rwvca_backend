@@ -1,5 +1,6 @@
 import { Op } from "sequelize";
 import db from "../database/models/index.js";
+import { monthExpr } from "../utils/sqlDialect.js";
 
 const sequelize = db.sequelize;
 
@@ -61,15 +62,16 @@ export async function buildRequisitionAnalytics(query = {}) {
 
   let monthly = [];
   try {
+    const month = monthExpr(sequelize);
     monthly = await db.Requisitions.findAll({
       attributes: [
-        [sequelize.fn("date_trunc", "month", sequelize.col("created_at")), "month"],
+        [month, "month"],
         [sequelize.fn("count", sequelize.col("id")), "count"],
         [sequelize.fn("coalesce", sequelize.fn("sum", sequelize.col("total_amount_requested")), 0), "amount"],
       ],
       where,
-      group: [sequelize.fn("date_trunc", "month", sequelize.col("created_at"))],
-      order: [[sequelize.fn("date_trunc", "month", sequelize.col("created_at")), "ASC"]],
+      group: [month],
+      order: [[month, "ASC"]],
       raw: true,
     });
   } catch {

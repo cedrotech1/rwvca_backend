@@ -13,9 +13,9 @@ export const getContactMessages = asyncHandler(async (req, res) => {
   if (req.query.status) where.status = req.query.status;
   if (req.query.search) {
     where[Op.or] = [
-      { name: { [Op.iLike]: `%${req.query.search}%` } },
-      { email: { [Op.iLike]: `%${req.query.search}%` } },
-      { subject: { [Op.iLike]: `%${req.query.search}%` } },
+      { name: { [Op.like]: `%${req.query.search}%` } },
+      { email: { [Op.like]: `%${req.query.search}%` } },
+      { subject: { [Op.like]: `%${req.query.search}%` } },
     ];
   }
   const { rows, count } = await db.ContactMessages.findAndCountAll({
@@ -57,7 +57,7 @@ export const getSubscribers = asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req);
   const where = {};
   if (req.query.status) where.status = req.query.status;
-  if (req.query.search) where.email = { [Op.iLike]: `%${req.query.search}%` };
+  if (req.query.search) where.email = { [Op.like]: `%${req.query.search}%` };
   const { rows, count } = await db.Subscribers.findAndCountAll({
     where,
     order: [["subscribed_at", "DESC"]],

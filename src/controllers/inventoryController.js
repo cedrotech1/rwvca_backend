@@ -27,9 +27,9 @@ export const getInventoryItems = asyncHandler(async (req, res) => {
   if (req.query.category) where.category = req.query.category;
   if (search) {
     where[Op.or] = [
-      { name: { [Op.iLike]: `%${search}%` } },
-      { description: { [Op.iLike]: `%${search}%` } },
-      { category: { [Op.iLike]: `%${search}%` } },
+      { name: { [Op.like]: `%${search}%` } },
+      { description: { [Op.like]: `%${search}%` } },
+      { category: { [Op.like]: `%${search}%` } },
     ];
   }
   const { rows, count } = await db.InventoryItems.findAndCountAll({

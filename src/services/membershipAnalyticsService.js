@@ -1,5 +1,6 @@
 import { Op } from "sequelize";
 import db from "../database/models/index.js";
+import { monthExpr } from "../utils/sqlDialect.js";
 
 const sequelize = db.sequelize;
 
@@ -80,7 +81,7 @@ function applyAnalyticsFilters(where, query = {}) {
       break;
   }
 
-  if (search) where.title = { [Op.iLike]: `%${search}%` };
+  if (search) where.title = { [Op.like]: `%${search}%` };
   return where;
 }
 
@@ -204,14 +205,15 @@ export async function buildMembershipAnalytics(query = {}) {
     if (mineOnly && userId) {
       trendWhere[Op.or] = [{ user_id: userId }, { submitted_by: userId }];
     }
+    const month = monthExpr(sequelize);
     monthly = await db.MembershipReports.findAll({
       attributes: [
-        [sequelize.fn("date_trunc", "month", sequelize.col("created_at")), "month"],
+        [month, "month"],
         [sequelize.fn("count", sequelize.col("id")), "count"],
       ],
       where: trendWhere,
-      group: [sequelize.fn("date_trunc", "month", sequelize.col("created_at"))],
-      order: [[sequelize.fn("date_trunc", "month", sequelize.col("created_at")), "ASC"]],
+      group: [month],
+      order: [[month, "ASC"]],
       raw: true,
     });
   } catch {

@@ -178,8 +178,8 @@ export const getReports = asyncHandler(async (req, res) => {
   }
   if (search) {
     where[Op.or] = [
-      { title: { [Op.iLike]: `%${search}%` } },
-      { content: { [Op.iLike]: `%${search}%` } },
+      { title: { [Op.like]: `%${search}%` } },
+      { content: { [Op.like]: `%${search}%` } },
     ];
   }
 

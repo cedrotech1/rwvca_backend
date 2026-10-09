@@ -38,12 +38,12 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
       },
       filters: {
-        type: DataTypes.JSONB,
+        type: DataTypes.JSON,
         allowNull: false,
         defaultValue: {},
       },
       snapshot: {
-        type: DataTypes.JSONB,
+        type: DataTypes.JSON,
         allowNull: false,
         defaultValue: {},
       },

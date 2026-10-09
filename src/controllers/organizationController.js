@@ -11,8 +11,8 @@ export const getOrganizationUnits = asyncHandler(async (req, res) => {
   if (req.query.is_active !== undefined) where.is_active = Number(req.query.is_active);
   if (req.query.search) {
     where[Op.or] = [
-      { unit_name: { [Op.iLike]: `%${req.query.search}%` } },
-      { title: { [Op.iLike]: `%${req.query.search}%` } },
+      { unit_name: { [Op.like]: `%${req.query.search}%` } },
+      { title: { [Op.like]: `%${req.query.search}%` } },
     ];
   }
   const items = await db.OrganizationStructure.findAll({

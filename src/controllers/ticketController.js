@@ -50,9 +50,9 @@ async function adminsAndHr(excludeId = null) {
   return db.Users.findAll({
     where: {
       [Op.or]: [
-        { role: { [Op.iLike]: "admin" } },
-        { role: { [Op.iLike]: "hr" } },
-        { role: { [Op.iLike]: "accountant" } },
+        { role: { [Op.like]: "admin" } },
+        { role: { [Op.like]: "hr" } },
+        { role: { [Op.like]: "accountant" } },
       ],
       ...(excludeId ? { id: { [Op.ne]: excludeId } } : {}),
     },
@@ -108,7 +108,7 @@ export const getTickets = asyncHandler(async (req, res) => {
   }
   if (req.query.status) where.status = req.query.status;
   if (req.query.priority) where.priority = req.query.priority;
-  if (req.query.search) where.title = { [Op.iLike]: `%${req.query.search}%` };
+  if (req.query.search) where.title = { [Op.like]: `%${req.query.search}%` };
 
   const { rows, count } = await db.Tickets.findAndCountAll({
     where,

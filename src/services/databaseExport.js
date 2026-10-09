@@ -4,20 +4,23 @@ import { QueryTypes } from "sequelize";
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const BATCH = 200;
 
-function quoteIdent(name) {
+function quoteIdent(name, dialect = "postgres") {
   if (!IDENTIFIER.test(name)) {
     throw new Error(`Refusing to export unsafe name: ${name}`);
   }
-  return `"${name}"`;
+  return dialect === "mysql" ? `\`${name}\`` : `"${name}"`;
 }
 
 function quoteText(value) {
   return `'${String(value).replace(/'/g, "''")}'`;
 }
 
-function sqlLiteral(value, udtName) {
+function sqlLiteral(value, udtName, dialect = "postgres") {
   if (value === null || value === undefined) return "NULL";
-  if (typeof value === "boolean") return value ? "TRUE" : "FALSE";
+  if (typeof value === "boolean") {
+    if (dialect === "mysql") return value ? "1" : "0";
+    return value ? "TRUE" : "FALSE";
+  }
   if (typeof value === "number") return Number.isFinite(value) ? String(value) : "NULL";
   if (value instanceof Date) return quoteText(value.toISOString());
   if (Buffer.isBuffer(value)) return `'\\x${value.toString("hex")}'`;
@@ -32,6 +35,7 @@ function sqlLiteral(value, udtName) {
     return `ARRAY[${items}]${udt.startsWith("_") ? `::${udt}` : ""}`;
   }
   if (typeof value === "object") {
+    if (dialect === "mysql") return quoteText(JSON.stringify(value));
     const cast = udt === "json" || udt === "jsonb" ? `::${udt}` : "";
     return `${quoteText(JSON.stringify(value))}${cast}`;
   }
@@ -39,6 +43,15 @@ function sqlLiteral(value, udtName) {
 }
 
 async function listTables(sequelize) {
+  if (sequelize.getDialect() === "mysql") {
+    return sequelize.query(
+      `SELECT table_name AS name
+       FROM information_schema.tables
+       WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'
+       ORDER BY table_name`,
+      { type: QueryTypes.SELECT }
+    );
+  }
   return sequelize.query(
     `SELECT c.relname AS name
      FROM pg_class c
@@ -50,6 +63,15 @@ async function listTables(sequelize) {
 }
 
 async function listColumns(sequelize, table) {
+  if (sequelize.getDialect() === "mysql") {
+    return sequelize.query(
+      `SELECT column_name, data_type AS udt_name
+       FROM information_schema.columns
+       WHERE table_schema = DATABASE() AND table_name = :table
+       ORDER BY ordinal_position`,
+      { replacements: { table }, type: QueryTypes.SELECT }
+    );
+  }
   return sequelize.query(
     `SELECT column_name, udt_name
      FROM information_schema.columns
@@ -60,18 +82,22 @@ async function listColumns(sequelize, table) {
 }
 
 export async function writeDatabaseSql(sequelize, output) {
+  const dialect = sequelize.getDialect();
   const tables = await listTables(sequelize);
   const databaseName = sequelize.config?.database || "rwvca";
-  output.write(`-- PostgreSQL database dump of ${databaseName}\n`);
+  output.write(`-- ${dialect} database dump of ${databaseName}\n`);
   output.write(`-- Generated ${new Date().toISOString()}\n`);
   output.write(`BEGIN;\n\n`);
 
   for (const table of tables) {
-    const name = table.name;
-    const columns = await listColumns(sequelize, name);
+    const name = table.name || table.NAME;
+    const columns = (await listColumns(sequelize, name)).map((column) => ({
+      column_name: column.column_name || column.COLUMN_NAME,
+      udt_name: column.udt_name || column.UDT_NAME || column.data_type || column.DATA_TYPE,
+    }));
     if (!columns.length) continue;
-    const columnList = columns.map((column) => quoteIdent(column.column_name)).join(", ");
-    const qualified = quoteIdent(name);
+    const columnList = columns.map((column) => quoteIdent(column.column_name, dialect)).join(", ");
+    const qualified = quoteIdent(name, dialect);
     let offset = 0;
 
     for (;;) {
@@ -82,7 +108,7 @@ export async function writeDatabaseSql(sequelize, output) {
       if (!rows.length) break;
       for (const row of rows) {
         const values = columns
-          .map((column) => sqlLiteral(row[column.column_name], column.udt_name))
+          .map((column) => sqlLiteral(row[column.column_name], column.udt_name, dialect))
           .join(", ");
         output.write(`INSERT INTO ${qualified} (${columnList}) VALUES (${values});\n`);
       }
@@ -120,6 +146,13 @@ function spawnPgDump(sequelize) {
 }
 
 export function sendDatabaseDump(sequelize, res, filename) {
+  if (sequelize.getDialect() === "mysql") {
+    res.setHeader("Content-Type", "application/sql; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    return writeDatabaseSql(sequelize, res).then(() => {
+      res.end();
+    });
+  }
   return new Promise((resolve, reject) => {
     let child;
     try {

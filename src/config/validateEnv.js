@@ -39,24 +39,15 @@ export function validateEnv() {
     errors.push('UAT_DATABASE_* configuration is incomplete for NODE_ENV=uat');
   }
 
-  // Local/dev/uat: keep databases on localhost only.
-  // Production on Render must be allowed to use a remote PRO_DATABASE_HOST.
+  // Development uses DEV_DATABASE_*. A remote PRO_DATABASE_HOST may stay in the file for production.
   if (!isProd) {
-    if (devHost && !isLocalDbHost(devHost)) {
-      errors.push(`DEV_DATABASE_HOST must be local only (got: ${devHost})`);
+    const activeHost = process.env.NODE_ENV === 'uat' ? uatHost : devHost;
+    if (activeHost && !isLocalDbHost(activeHost)) {
+      errors.push(`The ${process.env.NODE_ENV === 'uat' ? 'UAT' : 'DEV'}_DATABASE_HOST must be local only (got: ${activeHost})`);
     }
-    if (proHost && !isLocalDbHost(proHost)) {
-      errors.push(`PRO_DATABASE_HOST must be local only outside production (got: ${proHost})`);
+    if (activeHost && CLOUD_DB_PATTERN.test(activeHost)) {
+      errors.push(`Remote cloud database host is not allowed outside production: ${activeHost}`);
     }
-    if (uatHost && !isLocalDbHost(uatHost)) {
-      errors.push(`UAT_DATABASE_HOST must be local only (got: ${uatHost})`);
-    }
-
-    [devHost, proHost, uatHost].forEach((h) => {
-      if (h && CLOUD_DB_PATTERN.test(h)) {
-        errors.push(`Remote cloud database host is not allowed outside production: ${h}`);
-      }
-    });
   }
 
   if (errors.length > 0) {

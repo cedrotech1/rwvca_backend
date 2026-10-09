@@ -22,9 +22,9 @@ export async function buildLeaveAnalytics(query = {}) {
   if (departmentId) userWhere.department_ID = departmentId;
   if (search) {
     userWhere[Op.or] = [
-      { names: { [Op.iLike]: `%${search}%` } },
-      { email: { [Op.iLike]: `%${search}%` } },
-      { role: { [Op.iLike]: `%${search}%` } },
+      { names: { [Op.like]: `%${search}%` } },
+      { email: { [Op.like]: `%${search}%` } },
+      { role: { [Op.like]: `%${search}%` } },
     ];
   }
 

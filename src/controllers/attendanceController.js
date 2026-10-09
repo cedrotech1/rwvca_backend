@@ -28,8 +28,8 @@ export const getAttendanceSessions = asyncHandler(async (req, res) => {
   if (req.query.status) where.status = req.query.status;
   if (req.query.search) {
     where[Op.or] = [
-      { title: { [Op.iLike]: `%${req.query.search}%` } },
-      { location: { [Op.iLike]: `%${req.query.search}%` } },
+      { title: { [Op.like]: `%${req.query.search}%` } },
+      { location: { [Op.like]: `%${req.query.search}%` } },
     ];
   }
   const { rows, count } = await db.Attendance.findAndCountAll({

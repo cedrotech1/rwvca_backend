@@ -16,8 +16,8 @@ export const getPlatforms = asyncHandler(async (req, res) => {
   if (req.query.status) where.status = req.query.status;
   if (req.query.search) {
     where[Op.or] = [
-      { name: { [Op.iLike]: `%${req.query.search}%` } },
-      { description: { [Op.iLike]: `%${req.query.search}%` } },
+      { name: { [Op.like]: `%${req.query.search}%` } },
+      { description: { [Op.like]: `%${req.query.search}%` } },
     ];
   }
   const { rows, count } = await db.Platforms.findAndCountAll({

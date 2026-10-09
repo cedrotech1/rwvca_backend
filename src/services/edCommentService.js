@@ -174,9 +174,9 @@ export async function searchNotifyUsers(query, currentUserId) {
       active: 1,
       deleted: { [Op.or]: [null, "0", 0, false] },
       [Op.or]: [
-        { names: { [Op.iLike]: `%${q}%` } },
-        { email: { [Op.iLike]: `%${q}%` } },
-        { role: { [Op.iLike]: `%${q}%` } },
+        { names: { [Op.like]: `%${q}%` } },
+        { email: { [Op.like]: `%${q}%` } },
+        { role: { [Op.like]: `%${q}%` } },
       ],
     },
     attributes: ["id", "names", "email", "role"],

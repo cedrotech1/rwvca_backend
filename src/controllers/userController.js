@@ -73,10 +73,10 @@ export const getAllUsers = asyncHandler(async (req, res) => {
   const search = String(req.query.search || "").trim();
   if (search) {
     where[Op.or] = [
-      { names: { [Op.iLike]: `%${search}%` } },
-      { email: { [Op.iLike]: `%${search}%` } },
-      { phone: { [Op.iLike]: `%${search}%` } },
-      { role: { [Op.iLike]: `%${search}%` } },
+      { names: { [Op.like]: `%${search}%` } },
+      { email: { [Op.like]: `%${search}%` } },
+      { phone: { [Op.like]: `%${search}%` } },
+      { role: { [Op.like]: `%${search}%` } },
     ];
   }
   if (req.query.role) where.role = req.query.role;

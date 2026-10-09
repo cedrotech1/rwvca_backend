@@ -26,8 +26,8 @@ export const getMemberProducts = asyncHandler(async (req, res) => {
   if (req.query.is_active !== undefined) where.is_active = Number(req.query.is_active);
   if (req.query.search) {
     where[Op.or] = [
-      { product_name: { [Op.iLike]: `%${req.query.search}%` } },
-      { company_name: { [Op.iLike]: `%${req.query.search}%` } },
+      { product_name: { [Op.like]: `%${req.query.search}%` } },
+      { company_name: { [Op.like]: `%${req.query.search}%` } },
     ];
   }
   const { rows, count } = await db.MemberProducts.findAndCountAll({

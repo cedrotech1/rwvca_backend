@@ -17,8 +17,8 @@ export const getPrograms = asyncHandler(async (req, res) => {
   if (req.query.category) where.category = req.query.category;
   if (req.query.search) {
     where[Op.or] = [
-      { title: { [Op.iLike]: `%${req.query.search}%` } },
-      { description: { [Op.iLike]: `%${req.query.search}%` } },
+      { title: { [Op.like]: `%${req.query.search}%` } },
+      { description: { [Op.like]: `%${req.query.search}%` } },
     ];
   }
   const { rows, count } = await db.Programs.findAndCountAll({

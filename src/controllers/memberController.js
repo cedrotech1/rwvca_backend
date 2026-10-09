@@ -173,10 +173,10 @@ export const getMembers = asyncHandler(async (req, res) => {
   const search = String(req.query.search || "").trim();
   if (search) {
     where[Op.or] = [
-      { company_name: { [Op.iLike]: `%${search}%` } },
-      { owner_name: { [Op.iLike]: `%${search}%` } },
-      { email: { [Op.iLike]: `%${search}%` } },
-      { phone: { [Op.iLike]: `%${search}%` } },
+      { company_name: { [Op.like]: `%${search}%` } },
+      { owner_name: { [Op.like]: `%${search}%` } },
+      { email: { [Op.like]: `%${search}%` } },
+      { phone: { [Op.like]: `%${search}%` } },
     ];
   }
   if (req.query.membership_status) where.membership_status = req.query.membership_status;
