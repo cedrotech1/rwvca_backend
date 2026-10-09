@@ -29,10 +29,10 @@ export function validateEnv() {
   const proName = process.env.PRO_DATABASE_NAME;
   const uatName = process.env.UAT_DATABASE_NAME || 'rwvca_uat';
 
-  if (!devHost || !devName) {
+  if (!isProd && (!devHost || !devName)) {
     errors.push('DEV_DATABASE_* configuration is incomplete');
   }
-  if (!proHost || !proName) {
+  if (isProd && (!proHost || !proName)) {
     errors.push('PRO_DATABASE_* configuration is incomplete');
   }
   if (process.env.NODE_ENV === 'uat' && (!uatHost || !uatName)) {
