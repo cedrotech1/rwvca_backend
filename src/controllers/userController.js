@@ -214,7 +214,18 @@ export const addUser = asyncHandler(async (req, res) => {
     });
   }
 
-  await createLog(req.user.id, "create_user", `Created user ${user.names} (#${user.id})`);
+  await createLog(
+    req.user.id,
+    "create_user",
+    `Created user ${user.names} (#${user.id}) primary_role="${body.role}" acting_roles=[${(savedActing || []).join(", ")}]`
+  );
+  if ((savedActing || []).length) {
+    await createLog(
+      req.user.id,
+      "set_acting_roles",
+      `Set acting roles for user #${user.id} (${user.names}): [${savedActing.join(", ")}]`
+    );
+  }
   await createNotification({
     receiverId: user.id,
     type: "user_created",
@@ -253,6 +264,9 @@ export const updateUser = asyncHandler(async (req, res) => {
 
   const user = await Users.findByPk(req.params.id);
   if (!user || String(user.deleted) === "1") return fail(res, "User not found", 404);
+
+  const previousRole = user.role;
+  const previousActing = (await getActingRolesMap([user.id])).get(Number(user.id)) || [];
 
   const body = { ...req.body };
   delete body.password;
@@ -298,9 +312,37 @@ export const updateUser = asyncHandler(async (req, res) => {
       body.role !== undefined ? body.role : user.role
     );
   } else {
-    acting = (await getActingRolesMap([user.id])).get(Number(user.id)) || [];
+    acting = previousActing;
   }
-  await createLog(req.user.id, "update_user", `Updated user #${user.id}`);
+
+  const nextRole = body.role !== undefined ? body.role : previousRole;
+  const roleChanged =
+    body.role !== undefined &&
+    String(previousRole || "").trim().toLowerCase() !== String(nextRole || "").trim().toLowerCase();
+  const actingChanged =
+    actingRolesInput !== undefined &&
+    JSON.stringify([...(previousActing || [])].map((r) => String(r).toLowerCase()).sort()) !==
+      JSON.stringify([...(acting || [])].map((r) => String(r).toLowerCase()).sort());
+
+  await createLog(
+    req.user.id,
+    "update_user",
+    `Updated user #${user.id} (${user.names || user.email})`
+  );
+  if (roleChanged) {
+    await createLog(
+      req.user.id,
+      "change_primary_role",
+      `Changed primary role for user #${user.id} (${user.names}): "${previousRole}" → "${nextRole}"`
+    );
+  }
+  if (actingChanged) {
+    await createLog(
+      req.user.id,
+      "set_acting_roles",
+      `Changed acting roles for user #${user.id} (${user.names}): [${previousActing.join(", ")}] → [${(acting || []).join(", ")}]`
+    );
+  }
   if (canManageUsers(req.user) && !isSelf) {
     await createNotification({
       whatsapp: true,

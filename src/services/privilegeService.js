@@ -160,6 +160,13 @@ export async function getRolePrivilegeMatrix() {
 export async function setRolePrivileges(roleId, privilegeIds = []) {
   const role = await Roles.findByPk(roleId);
   if (!role) return null;
+
+  const beforeLinks = await RolePrivileges.findAll({
+    where: { role_id: roleId },
+    attributes: ["privilege_id"],
+  });
+  const beforeIds = new Set(beforeLinks.map((row) => Number(row.privilege_id)));
+
   const ids = [
     ...new Set(
       (Array.isArray(privilegeIds) ? privilegeIds : [])
@@ -168,11 +175,13 @@ export async function setRolePrivileges(roleId, privilegeIds = []) {
     ),
   ];
   await RolePrivileges.destroy({ where: { role_id: roleId } });
+  let validIds = [];
   if (ids.length) {
     const valid = await Privileges.findAll({
       where: { id: { [Op.in]: ids } },
-      attributes: ["id"],
+      attributes: ["id", "code"],
     });
+    validIds = valid.map((p) => Number(p.id));
     await RolePrivileges.bulkCreate(
       valid.map((p) => ({
         role_id: Number(roleId),
@@ -180,8 +189,31 @@ export async function setRolePrivileges(roleId, privilegeIds = []) {
       }))
     );
   }
+
+  const afterIds = new Set(validIds);
+  const addedIds = [...afterIds].filter((id) => !beforeIds.has(id));
+  const removedIds = [...beforeIds].filter((id) => !afterIds.has(id));
+  const codeRows =
+    addedIds.length || removedIds.length
+      ? await Privileges.findAll({
+          where: { id: { [Op.in]: [...addedIds, ...removedIds] } },
+          attributes: ["id", "code"],
+        })
+      : [];
+  const codeById = new Map(codeRows.map((p) => [Number(p.id), p.code]));
+
   invalidatePrivilegeCache();
-  return getRolePrivilegeMatrix();
+  const matrix = await getRolePrivilegeMatrix();
+  return {
+    matrix,
+    change: {
+      role_id: Number(role.id),
+      role_name: role.role_name,
+      added: addedIds.map((id) => codeById.get(id) || `#${id}`),
+      removed: removedIds.map((id) => codeById.get(id) || `#${id}`),
+      total: afterIds.size,
+    },
+  };
 }
 
 export async function reseedRoleDefaults(roleId) {
@@ -196,5 +228,70 @@ export async function reseedRoleDefaults(roleId) {
   return setRolePrivileges(
     roleId,
     privs.map((p) => p.id)
+  );
+}
+
+/** Users with this role as primary or acting role. */
+export async function getUsersForRoleName(roleName) {
+  const name = String(roleName || "").trim();
+  if (!name || !db.Users) return [];
+  const Users = db.Users;
+  const UserActingRoles = db.UserActingRoles;
+  const primary = await Users.findAll({
+    where: {
+      deleted: { [Op.ne]: "1" },
+      [Op.and]: [
+        db.sequelize.where(
+          db.sequelize.fn("lower", db.sequelize.col("Users.role")),
+          name.toLowerCase()
+        ),
+      ],
+    },
+    attributes: ["id", "names", "email", "role", "phone", "active", "department_ID"],
+    order: [["names", "ASC"]],
+  });
+
+  let actingUserIds = [];
+  if (UserActingRoles) {
+    const actingRows = await UserActingRoles.findAll({
+      where: db.sequelize.where(
+        db.sequelize.fn("lower", db.sequelize.col("UserActingRoles.role")),
+        name.toLowerCase()
+      ),
+      attributes: ["user_id"],
+    });
+    actingUserIds = actingRows.map((row) => Number(row.user_id)).filter(Boolean);
+  }
+
+  let actingUsers = [];
+  if (actingUserIds.length) {
+    actingUsers = await Users.findAll({
+      where: {
+        id: { [Op.in]: actingUserIds },
+        deleted: { [Op.ne]: "1" },
+      },
+      attributes: ["id", "names", "email", "role", "phone", "active", "department_ID"],
+      order: [["names", "ASC"]],
+    });
+  }
+
+  const byId = new Map();
+  for (const row of primary) {
+    const plain = row.toJSON();
+    plain.assignment = "primary";
+    byId.set(Number(plain.id), plain);
+  }
+  for (const row of actingUsers) {
+    const id = Number(row.id);
+    if (byId.has(id)) {
+      byId.get(id).assignment = "primary+acting";
+    } else {
+      const plain = row.toJSON();
+      plain.assignment = "acting";
+      byId.set(id, plain);
+    }
+  }
+  return [...byId.values()].sort((a, b) =>
+    String(a.names || "").localeCompare(String(b.names || ""))
   );
 }

@@ -3,6 +3,7 @@ import { getRoles, createRole, updateRole, deleteRole } from "../controllers/rol
 import {
   getPrivileges,
   getRolePrivilegeMatrixHandler,
+  getRoleUsers,
   restoreRolePrivilegeDefaults,
   updateRolePrivileges,
 } from "../controllers/privilegeController.js";
@@ -13,6 +14,7 @@ const router = express.Router();
 
 router.get("/privileges/catalog", protect, getPrivileges);
 router.get("/privileges/matrix", protect, getRolePrivilegeMatrixHandler);
+router.get("/:roleId/users", protect, getRoleUsers);
 router.put("/:roleId/privileges", protect, updateRolePrivileges);
 router.post("/:roleId/privileges/restore-defaults", protect, restoreRolePrivilegeDefaults);
 
