@@ -184,8 +184,8 @@ export const getRequisition = asyncHandler(async (req, res) => {
   return ok(res, {
     ...row.toJSON(),
     permissions: {
-      can_edit: Number(row.prepared_by) === Number(req.user.id) && ["draft", "reverted", "pending"].includes(row.status),
-      can_submit: Number(row.prepared_by) === Number(req.user.id) && ["draft", "reverted"].includes(row.status),
+      can_edit: canAccess(req.user, row),
+      can_submit: canAccess(req.user, row) && ["draft", "reverted"].includes(row.status),
       can_verify: Number(row.sended_to) === Number(req.user.id) || isAdminRole(req.user.role) || isExactHr(req.user.role),
       can_approve: isEdRole(req.user.role) || isExecutiveRole(req.user.role) || isAdminRole(req.user.role),
       can_reject: Number(row.sended_to) === Number(req.user.id) || isEdRole(req.user.role) || isAdminRole(req.user.role) || isExactHr(req.user.role),
@@ -251,16 +251,18 @@ export const createRequisition = asyncHandler(async (req, res) => {
 export const updateRequisition = asyncHandler(async (req, res) => {
   const row = await db.Requisitions.findByPk(req.params.id);
   if (!row) return fail(res, "Requisition not found", 404);
-  if (Number(row.prepared_by) !== Number(req.user.id)) return fail(res, "Access denied", 403);
-  if (!["draft", "reverted", "pending"].includes(row.status)) {
-    return fail(res, `Cannot edit requisition with status ${row.status}`);
-  }
+  if (!canAccess(req.user, row)) return fail(res, "Access denied", 403);
 
   const body = req.body || {};
   const items = Array.isArray(body.items) ? body.items : null;
-  const action = body.action === "submit" ? "pending" : row.status === "reverted" && body.action === "submit" ? "pending" : row.status;
+  const previousStatus = String(row.status || "");
+  const wantsSubmit = body.action === "submit";
+  // Keep the current status for any edit. Only draft/reverted may move to pending on submit.
+  const nextStatus = wantsSubmit && ["draft", "reverted"].includes(previousStatus)
+    ? "pending"
+    : previousStatus;
   const sended_to = Number(body.sended_to || row.sended_to || 0);
-  if (action === "pending" && !sended_to) return fail(res, "sended_to is required when submitting");
+  if (nextStatus === "pending" && !sended_to) return fail(res, "sended_to is required when submitting");
 
   const payload = {
     date: body.date || row.date,
@@ -270,19 +272,24 @@ export const updateRequisition = asyncHandler(async (req, res) => {
     amount_in_words: body.amount_in_words !== undefined ? body.amount_in_words : row.amount_in_words,
     sended_to,
     viewer_id: body.viewer_id !== undefined ? body.viewer_id : row.viewer_id,
-    status: body.action === "submit" ? "pending" : row.status === "reverted" && body.action === "submit" ? "pending" : row.status,
+    status: nextStatus,
   };
   if (items) {
     payload.total_amount_requested = sumItems(items);
     await db.Requisitionitems.destroy({ where: { requisition_id: row.id } });
     await db.Requisitionitems.bulkCreate(mapItems(items, row.id));
   }
-  if (body.action === "submit") {
+  if (wantsSubmit && nextStatus === "pending") {
     payload.submitted_by = req.user.id;
     payload.submitted_at = new Date();
   }
   await row.update(payload);
-  await addReqLog(row.id, row.status, req.user.id, body.action === "submit" ? "Resubmitted for review" : "Requisition updated");
+
+  const logComment = wantsSubmit && nextStatus === "pending" && previousStatus !== "pending"
+    ? `${req.user.names} resubmitted for review (was ${previousStatus})`
+    : `${req.user.names} edited requisition (status ${nextStatus})`;
+  await addReqLog(row.id, nextStatus, req.user.id, logComment);
+  await createLog(req.user.id, "update_requisition", `Edited requisition #${row.id} (${previousStatus} → ${nextStatus})`);
   return ok(res, await loadRequisition(row.id), "Requisition updated");
 });
 
