@@ -5,6 +5,7 @@ import {
   getRequisition,
   createRequisition,
   updateRequisition,
+  deleteRequisition,
   updateRequisitionStatus,
   authorizeRequisition,
   updateViewerStatus,
@@ -19,6 +20,7 @@ router.get("/analytics", protect, getRequisitionAnalytics);
 router.get("/:id", protect, getRequisition);
 router.post("/", protect, createRequisition);
 router.put("/:id", protect, updateRequisition);
+router.delete("/:id", protect, deleteRequisition);
 router.post("/:id/status", protect, updateRequisitionStatus);
 router.post("/:id/authorize", protect, authorizeRequisition);
 router.put("/:id/viewer", protect, updateViewerStatus);

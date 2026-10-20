@@ -68,6 +68,27 @@ function canAccess(user, row) {
   return false;
 }
 
+/** Account code / budget source are filled by accountants only. */
+function canEditAccountFields(role) {
+  const value = String(role || "").trim().toLowerCase();
+  return value === "accountant" || value === "assistant to the accountant";
+}
+
+function amountInWordsFromTotal(amount) {
+  const number = Math.floor(Number(amount) || 0);
+  if (number === 0) return "ZERO RWANDA FRANCS";
+  const units = ["", "ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE", "TEN", "ELEVEN", "TWELVE", "THIRTEEN", "FOURTEEN", "FIFTEEN", "SIXTEEN", "SEVENTEEN", "EIGHTEEN", "NINETEEN"];
+  const tens = ["", "", "TWENTY", "THIRTY", "FORTY", "FIFTY", "SIXTY", "SEVENTY", "EIGHTY", "NINETY"];
+  const chunk = (n) => {
+    if (n < 20) return units[n];
+    if (n < 100) return `${tens[Math.floor(n / 10)]} ${units[n % 10]}`.trim();
+    if (n < 1000) return `${units[Math.floor(n / 100)]} HUNDRED ${chunk(n % 100)}`.trim();
+    if (n < 1000000) return `${chunk(Math.floor(n / 1000))} THOUSAND ${chunk(n % 1000)}`.trim();
+    return `${chunk(Math.floor(n / 1000000))} MILLION ${chunk(n % 1000000)}`.trim();
+  };
+  return `${chunk(number)} RWANDA FRANCS`.replace(/\s+/g, " ").trim();
+}
+
 function sumItems(items) {
   return items.reduce((total, item) => total + Number(item.total_amount || (Number(item.quantity || 0) * Number(item.unit_price || 0))), 0);
 }
@@ -185,6 +206,8 @@ export const getRequisition = asyncHandler(async (req, res) => {
     ...row.toJSON(),
     permissions: {
       can_edit: canAccess(req.user, row),
+      can_delete: canAccess(req.user, row),
+      can_edit_account_fields: canEditAccountFields(req.user.role),
       can_submit: canAccess(req.user, row) && ["draft", "reverted"].includes(row.status),
       can_verify: Number(row.sended_to) === Number(req.user.id) || isAdminRole(req.user.role) || isExactHr(req.user.role),
       can_approve: isEdRole(req.user.role) || isExecutiveRole(req.user.role) || isAdminRole(req.user.role),
@@ -199,8 +222,8 @@ export const getRequisition = asyncHandler(async (req, res) => {
 export const createRequisition = asyncHandler(async (req, res) => {
   const body = req.body || {};
   const items = Array.isArray(body.items) ? body.items : [];
-  if (!body.date || !body.department_id || !body.budget_source || !body.account_code) {
-    return fail(res, "date, department_id, budget_source, and account_code are required");
+  if (!body.date || !body.department_id) {
+    return fail(res, "date and department_id are required");
   }
   if (!items.length) return fail(res, "At least one requisition item is required");
 
@@ -209,12 +232,13 @@ export const createRequisition = asyncHandler(async (req, res) => {
   if (action === "pending" && !sended_to) return fail(res, "sended_to is required when submitting");
 
   const total = sumItems(items);
+  const allowAccountFields = canEditAccountFields(req.user.role);
   const row = await db.Requisitions.create({
     date: body.date,
     department_id: body.department_id,
-    budget_source: body.budget_source,
-    account_code: body.account_code,
-    amount_in_words: body.amount_in_words || null,
+    budget_source: allowAccountFields ? (body.budget_source || null) : null,
+    account_code: allowAccountFields ? (body.account_code || null) : null,
+    amount_in_words: amountInWordsFromTotal(total),
     total_amount_requested: total,
     prepared_by: req.user.id,
     sended_to: sended_to || 0,
@@ -267,17 +291,21 @@ export const updateRequisition = asyncHandler(async (req, res) => {
   const payload = {
     date: body.date || row.date,
     department_id: body.department_id || row.department_id,
-    budget_source: body.budget_source || row.budget_source,
-    account_code: body.account_code || row.account_code,
-    amount_in_words: body.amount_in_words !== undefined ? body.amount_in_words : row.amount_in_words,
     sended_to,
     viewer_id: body.viewer_id !== undefined ? body.viewer_id : row.viewer_id,
     status: nextStatus,
   };
+  if (canEditAccountFields(req.user.role)) {
+    if (body.budget_source !== undefined) payload.budget_source = body.budget_source || null;
+    if (body.account_code !== undefined) payload.account_code = body.account_code || null;
+  }
   if (items) {
     payload.total_amount_requested = sumItems(items);
+    payload.amount_in_words = amountInWordsFromTotal(payload.total_amount_requested);
     await db.Requisitionitems.destroy({ where: { requisition_id: row.id } });
     await db.Requisitionitems.bulkCreate(mapItems(items, row.id));
+  } else if (body.total_amount_requested != null) {
+    payload.amount_in_words = amountInWordsFromTotal(body.total_amount_requested);
   }
   if (wantsSubmit && nextStatus === "pending") {
     payload.submitted_by = req.user.id;
@@ -291,6 +319,24 @@ export const updateRequisition = asyncHandler(async (req, res) => {
   await addReqLog(row.id, nextStatus, req.user.id, logComment);
   await createLog(req.user.id, "update_requisition", `Edited requisition #${row.id} (${previousStatus} → ${nextStatus})`);
   return ok(res, await loadRequisition(row.id), "Requisition updated");
+});
+
+export const deleteRequisition = asyncHandler(async (req, res) => {
+  const row = await db.Requisitions.findByPk(req.params.id);
+  if (!row) return fail(res, "Requisition not found", 404);
+  if (!canAccess(req.user, row)) return fail(res, "Access denied", 403);
+
+  const requisitionId = row.id;
+  const status = row.status;
+  await db.Requisitionitems.destroy({ where: { requisition_id: requisitionId } });
+  await db.RequisitionLogs.destroy({ where: { requisition_id: requisitionId } });
+  await row.destroy();
+  await createLog(
+    req.user.id,
+    "delete_requisition",
+    `${req.user.names} deleted requisition #${requisitionId} (was ${status})`
+  );
+  return ok(res, { id: requisitionId }, "Requisition deleted");
 });
 
 export const updateRequisitionStatus = asyncHandler(async (req, res) => {
