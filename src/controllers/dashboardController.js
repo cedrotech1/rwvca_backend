@@ -9,6 +9,7 @@ import {
   isExactHr,
   isExecutiveRole,
   isLogisticRole,
+  getEffectiveRoles,
 } from "../utils/roleHelpers.js";
 
 const sequelize = db.sequelize;
@@ -67,9 +68,9 @@ function dateWhere(from, to, field = "created_at") {
   return { [field]: { [Op.between]: [from, to] } };
 }
 
-function financeReadyWhere(role) {
+function financeReadyWhere(roleOrUser) {
   const where = { status: { [Op.in]: ["approved", "authorized"] } };
-  if (normalizeRole(role) === "assistant to ed") {
+  if (getEffectiveRoles(roleOrUser).includes("assistant to ed")) {
     where.total_amount_requested = { [Op.lt]: 100000 };
   }
   return where;
@@ -345,7 +346,7 @@ export const getDashboardOverview = asyncHandler(async (req, res) => {
   const userId = req.user.id;
   const profile = dashboardProfile(req.user.role);
   const ranged = dateWhere(range.from, range.to);
-  const financeWhere = { ...ranged, ...financeReadyWhere(req.user.role) };
+  const financeWhere = { ...ranged, ...financeReadyWhere(req.user) };
 
   const mineReq = { ...ranged, prepared_by: userId };
   const mineLeave = { ...ranged, user_id: userId };
@@ -536,7 +537,7 @@ export const getDashboardOverview = asyncHandler(async (req, res) => {
   const trendMissionWhere = profile.sees_all ? {} : { user_id: userId };
   const trendLeaveWhere = profile.sees_all ? {} : { user_id: userId };
   const trendReqWhere = profile.finance && !profile.sees_all
-    ? financeReadyWhere(req.user.role)
+    ? financeReadyWhere(req.user)
     : profile.sees_all ? {} : { prepared_by: userId };
 
   const [missionTrend, leaveTrend, requisitionTrend] = await Promise.all([
@@ -694,11 +695,11 @@ export const getDashboardOverview = asyncHandler(async (req, res) => {
       subscribers,
     } : null,
     capabilities: {
-      can_manage_users: profile.users || isExactHr(req.user.role) || isAdminRole(req.user.role),
-      can_manage_finance: profile.finance || isAccountantRole(req.user.role),
-      can_manage_cms: profile.cms || isAdminRole(req.user.role),
-      can_see_all: profile.sees_all || isExecutiveRole(req.user.role),
-      can_manage_logistics: isLogisticRole(req.user.role),
+      can_manage_users: profile.users || isExactHr(req.user) || isAdminRole(req.user),
+      can_manage_finance: profile.finance || isAccountantRole(req.user),
+      can_manage_cms: profile.cms || isAdminRole(req.user),
+      can_see_all: profile.sees_all || isExecutiveRole(req.user),
+      can_manage_logistics: isLogisticRole(req.user),
     },
   });
 });

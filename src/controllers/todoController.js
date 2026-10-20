@@ -18,7 +18,7 @@ async function sharedTaskIds(userId) {
 }
 
 async function canAccess(user, row) {
-  if (isAdminRole(user.role) || Number(row.user_id) === Number(user.id)) return true;
+  if (isAdminRole(user) || Number(row.user_id) === Number(user.id)) return true;
   const share = await db.TodoShares.findOne({
     where: { task_id: row.id, shared_with: user.id, status: { [Op.ne]: "declined" } },
   });
@@ -130,7 +130,7 @@ export const completeTodo = asyncHandler(async (req, res) => {
 export const shareTodo = asyncHandler(async (req, res) => {
   const row = await db.UserTasks.findByPk(req.params.id);
   if (!row) return fail(res, "Todo not found", 404);
-  if (Number(row.user_id) !== Number(req.user.id) && !isAdminRole(req.user.role)) {
+  if (Number(row.user_id) !== Number(req.user.id) && !isAdminRole(req.user)) {
     return fail(res, "Access denied", 403);
   }
   const ids = Array.isArray(req.body.user_ids) ? req.body.user_ids : [];
@@ -186,7 +186,7 @@ export const addTodoComment = asyncHandler(async (req, res) => {
 export const deleteTodo = asyncHandler(async (req, res) => {
   const row = await db.UserTasks.findByPk(req.params.id);
   if (!row) return fail(res, "Todo not found", 404);
-  if (Number(row.user_id) !== Number(req.user.id) && !isAdminRole(req.user.role)) {
+  if (Number(row.user_id) !== Number(req.user.id) && !isAdminRole(req.user)) {
     return fail(res, "Access denied", 403);
   }
   await db.TodoComments.destroy({ where: { task_id: row.id } });

@@ -126,7 +126,7 @@ export const getDocuments = asyncHandler(async (req, res) => {
   } else if (tab === "shared") {
     const ids = await sharedIdsFor(req.user.id);
     where.id = ids.length ? ids : -1;
-  } else if (tab === "all" && isEdRole(req.user.role)) {
+  } else if (tab === "all" && isEdRole(req.user)) {
     // ED sees every document
   } else {
     const ids = await sharedIdsFor(req.user.id);
@@ -187,9 +187,9 @@ export const getDocuments = asyncHandler(async (req, res) => {
       share_type: myShare ? (Number(myShare.is_forward) === 1 ? "forwarded" : "direct") : null,
       department_name: tab === "shared" ? sharedByDepartment : creatorDepartment,
       creator_name: json.creator?.names,
-      can_download: json.status === "open" || isEdRole(req.user.role),
+      can_download: json.status === "open" || isEdRole(req.user),
       can_delete: Number(json.created_by) === Number(req.user.id),
-      can_toggle_status: isEdRole(req.user.role),
+      can_toggle_status: isEdRole(req.user),
     };
   });
   return ok(res, { items, pagination: paginationMeta(count, page, limit) });
@@ -282,7 +282,7 @@ export const createDocument = asyncHandler(async (req, res) => {
 export const updateDocument = asyncHandler(async (req, res) => {
   const row = await db.Documents.findByPk(req.params.id);
   if (!row) return fail(res, "Document not found", 404);
-  if (Number(row.created_by) !== Number(req.user.id) && !isAdminRole(req.user.role)) {
+  if (Number(row.created_by) !== Number(req.user.id) && !isAdminRole(req.user)) {
     return fail(res, "Access denied", 403);
   }
   let saved = null;
@@ -391,7 +391,7 @@ export const shareDocument = asyncHandler(async (req, res) => {
 export const updateDocumentStatus = asyncHandler(async (req, res) => {
   const row = await db.Documents.findByPk(req.params.id);
   if (!row) return fail(res, "Document not found", 404);
-  if (!isEdRole(req.user.role)) return fail(res, "Only ED can change document status", 403);
+  if (!isEdRole(req.user)) return fail(res, "Only ED can change document status", 403);
   const newStatus = req.body.new_status === "open" || req.body.status === "open" ? "open" : "closed";
   await row.update({ status: newStatus });
 
@@ -492,7 +492,7 @@ export const addDocumentComment = asyncHandler(async (req, res) => {
 export const deleteDocument = asyncHandler(async (req, res) => {
   const row = await db.Documents.findByPk(req.params.id);
   if (!row) return fail(res, "Document not found", 404);
-  if (Number(row.created_by) !== Number(req.user.id) && !isAdminRole(req.user.role)) {
+  if (Number(row.created_by) !== Number(req.user.id) && !isAdminRole(req.user)) {
     return fail(res, "Access denied", 403);
   }
   await db.DocumentComments.destroy({ where: { document_id: row.id } });

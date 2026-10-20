@@ -1,10 +1,16 @@
+import { userHasPrivilege } from "../services/privilegeService.js";
+
 export const ADMIN_ROLES = ["admin", "ed", "chairman"];
-/** Roles that share HR operational powers (verify leave/mission, org lists, etc.). */
 export const HR_SPECIAL_ROLES = ["hr", "accountant"];
 export const HR_ROLES = ["admin", "ed", "hr", "accountant"];
-export const FINANCE_ROLES = ["admin", "ed", "accountant", "assistant to the accountant", "finance"];
+export const FINANCE_ROLES = [
+  "admin",
+  "ed",
+  "accountant",
+  "assistant to the accountant",
+  "finance",
+];
 
-/** Named staff with full procurement module access (in addition to Procurement Officer). */
 export const PROCUREMENT_FULL_ACCESS_EMAILS = [
   "gnyirabahizi@rwvca.org.rw",
   "ebizumuremyi@rwvca.org.rw",
@@ -25,77 +31,140 @@ export const PROCUREMENT_ACCESS_ROLES = [
 const normalize = (role) => String(role || "").trim().toLowerCase();
 const normalizeEmail = (email) => String(email || "").trim().toLowerCase();
 
-export const isAdminRole = (role) => ADMIN_ROLES.includes(normalize(role));
-export const isHrRole = (role) => HR_ROLES.includes(normalize(role));
-export const isFinanceRole = (role) => FINANCE_ROLES.includes(normalize(role));
+export function getEffectiveRoles(roleOrUser) {
+  if (roleOrUser && typeof roleOrUser === "object") {
+    if (Array.isArray(roleOrUser.effective_roles) && roleOrUser.effective_roles.length) {
+      return [
+        ...new Set(roleOrUser.effective_roles.map(normalize).filter(Boolean)),
+      ];
+    }
+    const primary = roleOrUser.role;
+    const acting = Array.isArray(roleOrUser.acting_roles)
+      ? roleOrUser.acting_roles
+      : [];
+    return [...new Set([primary, ...acting].map(normalize).filter(Boolean))];
+  }
+  const single = normalize(roleOrUser);
+  return single ? [single] : [];
+}
 
-/** True for HR and Accountant — both can perform HR special workflow actions. */
-export const hasHrSpecialAccess = (role) => HR_SPECIAL_ROLES.includes(normalize(role));
+export function userHasAnyRole(roleOrUser, allowedRoles = []) {
+  const allowed = new Set((allowedRoles || []).map(normalize).filter(Boolean));
+  if (!allowed.size) return false;
+  return getEffectiveRoles(roleOrUser).some((role) => allowed.has(role));
+}
 
-export const canManageUsers = (role) => isAdminRole(role) || hasHrSpecialAccess(role);
+function hasLoadedPrivileges(roleOrUser) {
+  return (
+    roleOrUser &&
+    typeof roleOrUser === "object" &&
+    Array.isArray(roleOrUser.privilege_codes)
+  );
+}
 
-/**
- * Historical name kept for call sites: means "has HR special powers".
- * Includes Accountant so they can do everything HR can do.
- */
-export const isExactHr = (role) => hasHrSpecialAccess(role);
+/** Prefer DB privileges on the logged-in user; fall back to role names for other users. */
+function hasPrivOrRole(roleOrUser, privilegeCode, fallbackRoles = []) {
+  if (hasLoadedPrivileges(roleOrUser)) {
+    return userHasPrivilege(roleOrUser, privilegeCode);
+  }
+  return userHasAnyRole(roleOrUser, fallbackRoles);
+}
 
-export const isEdRole = (role) => normalize(role) === "ed";
-export const isChairmanRole = (role) => normalize(role) === "chairman";
-export const isExecutiveRole = (role) => isEdRole(role) || isChairmanRole(role);
-export const isDirectApplicant = (role) => isExecutiveRole(role);
-export const canReviewWorkflow = (role) =>
-  hasHrSpecialAccess(role) || isAdminRole(role) || isExecutiveRole(role);
+export const isAdminRole = (roleOrUser) =>
+  hasPrivOrRole(roleOrUser, "admin.system", ADMIN_ROLES) ||
+  (hasLoadedPrivileges(roleOrUser) && userHasAnyRole(roleOrUser, ADMIN_ROLES));
 
-export const isLogisticRole = (role) => {
-  const value = normalize(role);
-  return value === "membership coordinator" || value === "logistic" || value === "admin";
-};
+export const isHrRole = (roleOrUser) =>
+  hasPrivOrRole(roleOrUser, "hr.special", HR_ROLES) ||
+  userHasAnyRole(roleOrUser, HR_ROLES);
 
-export const canManageAssets = (role) => {
-  const value = normalize(role);
-  return value === "membership coordinator" || value === "logistic";
-};
+export const isFinanceRole = (roleOrUser) =>
+  hasPrivOrRole(roleOrUser, "finance.requisitions.view", FINANCE_ROLES);
 
-export const canManageInventory = (role) => {
-  const value = normalize(role);
-  return value === "membership coordinator" || value === "logistic" || value === "ed" || value === "chairman";
-};
+export const hasHrSpecialAccess = (roleOrUser) =>
+  hasPrivOrRole(roleOrUser, "hr.special", HR_SPECIAL_ROLES);
 
-export const isAccountantRole = (role) => {
-  const value = normalize(role);
-  return value === "accountant" || value === "assistant to the accountant" || value === "assistant to ed";
-};
+export const canManageUsers = (roleOrUser) =>
+  hasPrivOrRole(roleOrUser, "users.manage", [
+    ...ADMIN_ROLES,
+    ...HR_SPECIAL_ROLES,
+  ]);
 
-export const isProcurementOfficer = (role) => {
-  const value = normalize(role);
-  return value === "procurement officer" || value === "procurement";
-};
+export const canManageRoles = (roleOrUser) =>
+  hasPrivOrRole(roleOrUser, "roles.manage", [
+    ...ADMIN_ROLES,
+    ...HR_SPECIAL_ROLES,
+  ]);
+
+export const isExactHr = (roleOrUser) => hasHrSpecialAccess(roleOrUser);
+
+export const isEdRole = (roleOrUser) => userHasAnyRole(roleOrUser, ["ed"]);
+export const isChairmanRole = (roleOrUser) =>
+  userHasAnyRole(roleOrUser, ["chairman"]);
+export const isExecutiveRole = (roleOrUser) =>
+  hasPrivOrRole(roleOrUser, "executive.access", ["ed", "chairman"]);
+export const isDirectApplicant = (roleOrUser) => isExecutiveRole(roleOrUser);
+
+export const canReviewWorkflow = (roleOrUser) =>
+  hasPrivOrRole(roleOrUser, "workflow.review", [
+    ...HR_SPECIAL_ROLES,
+    ...ADMIN_ROLES,
+  ]);
+
+export const isLogisticRole = (roleOrUser) =>
+  hasPrivOrRole(roleOrUser, "assets.manage", [
+    "membership coordinator",
+    "logistic",
+    "admin",
+  ]);
+
+export const canManageAssets = (roleOrUser) =>
+  hasPrivOrRole(roleOrUser, "assets.manage", [
+    "membership coordinator",
+    "logistic",
+  ]);
+
+export const canManageInventory = (roleOrUser) =>
+  hasPrivOrRole(roleOrUser, "inventory.manage", [
+    "membership coordinator",
+    "logistic",
+    "ed",
+    "chairman",
+  ]);
+
+export const isAccountantRole = (roleOrUser) =>
+  hasPrivOrRole(roleOrUser, "finance.requisitions.view", [
+    "accountant",
+    "assistant to the accountant",
+    "assistant to ed",
+  ]);
+
+export const isProcurementOfficer = (roleOrUser) =>
+  hasPrivOrRole(roleOrUser, "procurement.manage", [
+    "procurement officer",
+    "procurement",
+  ]);
 
 export const hasProcurementEmailAccess = (user) =>
   PROCUREMENT_FULL_ACCESS_EMAILS.includes(normalizeEmail(user?.email));
 
-/** Can open procurement dashboard / read stats and records. */
 export const canAccessProcurement = (user) => {
   if (!user) return false;
   if (hasProcurementEmailAccess(user)) return true;
-  return PROCUREMENT_ACCESS_ROLES.includes(normalize(user.role));
+  return hasPrivOrRole(user, "procurement.access", PROCUREMENT_ACCESS_ROLES);
 };
 
-/**
- * Can create / update / delete procurement records and documents.
- * Procurement Officer is the primary manager; the three named staff also have full access.
- */
 export const canManageProcurement = (user) => {
   if (!user) return false;
-  if (isProcurementOfficer(user.role)) return true;
   if (hasProcurementEmailAccess(user)) return true;
-  return isAdminRole(user.role);
+  if (hasLoadedPrivileges(user)) {
+    return userHasPrivilege(user, "procurement.manage");
+  }
+  return isProcurementOfficer(user) || isAdminRole(user);
 };
 
-export const canManageMembers = (role) => {
-  const value = normalize(role);
-  return [
+export const canManageMembers = (roleOrUser) =>
+  hasPrivOrRole(roleOrUser, "members.manage", [
     "ed",
     "chairman",
     "admin",
@@ -104,5 +173,4 @@ export const canManageMembers = (role) => {
     "membership officer",
     "logistic",
     "membership r. supervisor",
-  ].includes(value);
-};
+  ]);

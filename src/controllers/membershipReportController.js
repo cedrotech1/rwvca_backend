@@ -7,7 +7,16 @@ import { createLog } from "../services/logService.js";
 import { createNotification } from "../services/notificationService.js";
 import { buildEmailPayload } from "../services/emailNotificationHelpers.js";
 import { USER_PUBLIC } from "../services/workflowUsers.js";
-import { isAdminRole, isAccountantRole, isExecutiveRole, isLogisticRole, isExactHr, canReviewWorkflow } from "../utils/roleHelpers.js";
+import {
+  isAdminRole,
+  isAccountantRole,
+  isExecutiveRole,
+  isLogisticRole,
+  isExactHr,
+  canReviewWorkflow,
+  getEffectiveRoles,
+  userHasAnyRole,
+} from "../utils/roleHelpers.js";
 import { requireNotificationPriority } from "../utils/notificationPriority.js";
 import { buildMembershipAnalytics } from "../services/membershipAnalyticsService.js";
 
@@ -23,14 +32,13 @@ const PAYMENT_METHODS = [
   "MEMBERSHIP_FEES_CONTRIBUTION",
 ];
 
-function canManage(role) {
-  const value = String(role || "").trim().toLowerCase();
+function canManage(roleOrUser) {
   return (
-    isAdminRole(role) ||
-    isExecutiveRole(role) ||
-    isLogisticRole(role) ||
-    isAccountantRole(role) ||
-    value === "membership r. supervisor"
+    isAdminRole(roleOrUser) ||
+    isExecutiveRole(roleOrUser) ||
+    isLogisticRole(roleOrUser) ||
+    isAccountantRole(roleOrUser) ||
+    getEffectiveRoles(roleOrUser).includes("membership r. supervisor")
   );
 }
 
@@ -86,12 +94,12 @@ function startOfDay(date) {
   return next;
 }
 
-function canApprove(role) {
-  return String(role || "").trim().toLowerCase() === "accountant";
+function canApprove(roleOrUser) {
+  return getEffectiveRoles(roleOrUser).includes("accountant");
 }
 
-function canAssignReviewers(role) {
-  return canApprove(role) || canManage(role);
+function canAssignReviewers(roleOrUser) {
+  return canApprove(roleOrUser) || canManage(roleOrUser);
 }
 
 function membershipReportLink(id) {
@@ -194,7 +202,7 @@ export const getMembershipReports = asyncHandler(async (req, res) => {
   const tab = req.query.tab || "my";
   const where = {};
 
-  if (tab === "all" && canManage(req.user.role)) {
+  if (tab === "all" && canManage(req.user)) {
     // full access sees every report, matching PHP my-reports.php
   } else if (tab === "review") {
     const assigned = await db.MembershipReportReviewers.findAll({
@@ -247,29 +255,28 @@ export const getMembershipReports = asyncHandler(async (req, res) => {
     })),
     pagination: paginationMeta(count, page, limit),
     stats: { total: count, this_week: thisWeek, this_month: thisMonth, this_year: thisYear },
-    can_view_coverage: canManage(req.user.role),
+    can_view_coverage: canManage(req.user),
   });
 });
 
-function canSeeMembershipAnalytics(role) {
-  const value = String(role || "").trim().toLowerCase();
-  if (value === "hr") return false;
+function canSeeMembershipAnalytics(roleOrUser) {
+  const roles = getEffectiveRoles(roleOrUser);
+  if (roles.length === 1 && roles[0] === "hr") return false;
   return (
-    canManage(role) ||
-    isAccountantRole(role) ||
-    canReviewWorkflow(role) ||
-    value.includes("membership")
+    canManage(roleOrUser) ||
+    isAccountantRole(roleOrUser) ||
+    canReviewWorkflow(roleOrUser) ||
+    roles.some((value) => value.includes("membership"))
   );
 }
 
-function canCreateMembershipReportRole(role) {
-  const value = String(role || "").trim().toLowerCase();
-  return [
+function canCreateMembershipReportRole(roleOrUser) {
+  return userHasAnyRole(roleOrUser, [
     "membership relations officer",
     "membership_officer",
     "membership officer",
     "membership r. supervisor",
-  ].includes(value);
+  ]);
 }
 
 function buildReportSummary(reports = []) {
@@ -509,8 +516,8 @@ export const getMembershipReportPrintBundle = asyncHandler(async (req, res) => {
 });
 
 export const getMembershipAnalytics = asyncHandler(async (req, res) => {
-  if (!canSeeMembershipAnalytics(req.user.role)) return fail(res, "Access denied", 403);
-  const mine = !canManage(req.user.role) && !canReviewWorkflow(req.user.role) && !isExactHr(req.user.role);
+  if (!canSeeMembershipAnalytics(req.user)) return fail(res, "Access denied", 403);
+  const mine = !canManage(req.user) && !canReviewWorkflow(req.user) && !isExactHr(req.user);
   const query = { ...req.query };
   if (mine) {
     query.user_id = req.user.id;
@@ -520,7 +527,7 @@ export const getMembershipAnalytics = asyncHandler(async (req, res) => {
 });
 
 export const getMembershipReportShareUsers = asyncHandler(async (req, res) => {
-  if (!canAssignReviewers(req.user.role)) {
+  if (!canAssignReviewers(req.user)) {
     return fail(res, "You don't have permission to share membership reports", 403);
   }
 
@@ -602,7 +609,7 @@ async function ensureMissedSharesTable() {
 function canAccessMissedShare(user, row) {
   return Number(row.shared_to) === Number(user.id)
     || Number(row.shared_by) === Number(user.id)
-    || isExecutiveRole(user.role)
+    || isExecutiveRole(user)
     || canManage(user.role);
 }
 
@@ -708,7 +715,7 @@ async function buildMembershipCoverage(query = {}) {
 }
 
 export const getMembershipReportCoverage = asyncHandler(async (req, res) => {
-  if (!canManage(req.user.role)) return fail(res, "Access denied", 403);
+  if (!canManage(req.user)) return fail(res, "Access denied", 403);
   try {
     const data = await buildMembershipCoverage({ ...req.query, missed_only: "0" });
     return ok(res, {
@@ -722,7 +729,7 @@ export const getMembershipReportCoverage = asyncHandler(async (req, res) => {
 });
 
 export const createMembershipMissedShare = asyncHandler(async (req, res) => {
-  if (!canManage(req.user.role)) return fail(res, "Access denied", 403);
+  if (!canManage(req.user)) return fail(res, "Access denied", 403);
   await ensureMissedSharesTable();
 
   const body = req.body || {};
@@ -826,7 +833,7 @@ export const getMembershipMissedShares = asyncHandler(async (req, res) => {
 
   if (tab === "sent") {
     // Only managers may list shares they sent; others get an empty list (no 403 on the reports page).
-    if (!canManage(req.user.role) && !isExecutiveRole(req.user.role)) {
+    if (!canManage(req.user) && !isExecutiveRole(req.user)) {
       return ok(res, { items: [] });
     }
     where.shared_by = req.user.id;
@@ -996,7 +1003,7 @@ export const getMembershipReport = asyncHandler(async (req, res) => {
 });
 
 export const createMembershipReport = asyncHandler(async (req, res) => {
-  if (!canCreateMembershipReportRole(req.user.role)) {
+  if (!canCreateMembershipReportRole(req.user)) {
     return fail(res, "Only membership officers can create membership reports", 403);
   }
   const body = req.body || {};
@@ -1085,7 +1092,7 @@ export const updateMembershipReport = asyncHandler(async (req, res) => {
 
   const isOwner =
     Number(row.user_id) === Number(req.user.id) || Number(row.submitted_by) === Number(req.user.id);
-  const manager = canManage(req.user.role);
+  const manager = canManage(req.user);
   if (!isOwner && !manager) return fail(res, "Access denied", 403);
 
   const status = String(row.status || "").toUpperCase();
@@ -1179,7 +1186,7 @@ export const updateMembershipReport = asyncHandler(async (req, res) => {
 export const approveMembershipReport = asyncHandler(async (req, res) => {
   const row = await db.MembershipReports.findByPk(req.params.id);
   if (!row) return fail(res, "Membership report not found", 404);
-  if (!canApprove(req.user.role)) return fail(res, "Only Accountants can approve membership reports", 403);
+  if (!canApprove(req.user)) return fail(res, "Only Accountants can approve membership reports", 403);
   await row.update({
     status: "APPROVED",
     approved_by: req.user.id,
@@ -1208,7 +1215,7 @@ export const approveMembershipReport = asyncHandler(async (req, res) => {
 export const revertMembershipReport = asyncHandler(async (req, res) => {
   const row = await db.MembershipReports.findByPk(req.params.id);
   if (!row) return fail(res, "Membership report not found", 404);
-  if (!canApprove(req.user.role)) return fail(res, "Only Accountants can revert membership reports", 403);
+  if (!canApprove(req.user)) return fail(res, "Only Accountants can revert membership reports", 403);
   const comment = String(req.body.comment || "").trim();
   if (!comment) return fail(res, "A comment is required when reverting");
   await row.update({ status: "REVERTED", approved_by: null, approved_at: null });
@@ -1250,7 +1257,7 @@ export const addMembershipReportComment = asyncHandler(async (req, res) => {
 export const assignMembershipReportReviewer = asyncHandler(async (req, res) => {
   const row = await db.MembershipReports.findByPk(req.params.id);
   if (!row) return fail(res, "Membership report not found", 404);
-  if (!canAssignReviewers(req.user.role)) return fail(res, "You don't have permission to assign reviewers", 403);
+  if (!canAssignReviewers(req.user)) return fail(res, "You don't have permission to assign reviewers", 403);
   const reviewerIds = Array.isArray(req.body.reviewer_ids)
     ? req.body.reviewer_ids
     : req.body.reviewer_id
@@ -1323,7 +1330,7 @@ export const markMembershipReportReviewed = asyncHandler(async (req, res) => {
 export const removeMembershipReportReviewer = asyncHandler(async (req, res) => {
   const row = await db.MembershipReports.findByPk(req.params.id);
   if (!row) return fail(res, "Membership report not found", 404);
-  if (!canAssignReviewers(req.user.role)) return fail(res, "Only authorized staff can remove shared users", 403);
+  if (!canAssignReviewers(req.user)) return fail(res, "Only authorized staff can remove shared users", 403);
   const reviewer_id = req.body.reviewer_id || req.params.reviewerId;
   const assigned = await db.MembershipReportReviewers.findOne({
     where: { report_id: row.id, reviewer_id },

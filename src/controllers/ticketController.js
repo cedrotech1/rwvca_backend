@@ -90,7 +90,7 @@ async function loadTicket(id) {
 }
 
 function canAccess(user, row) {
-  if (isAdminRole(user.role) || isExactHr(user.role)) return true;
+  if (isAdminRole(user) || isExactHr(user)) return true;
   return Number(row.created_by) === Number(user.id) || Number(row.assigned_to) === Number(user.id);
 }
 
@@ -101,7 +101,7 @@ export const getTickets = asyncHandler(async (req, res) => {
   if (tab === "mine" || tab === "my_tickets") where.created_by = req.user.id;
   else if (tab === "assigned") where.assigned_to = req.user.id;
   else if (tab === "open") where.status = { [Op.in]: ["open", "in_progress", "pending"] };
-  else if (tab === "all" && (isAdminRole(req.user.role) || isExactHr(req.user.role))) {
+  else if (tab === "all" && (isAdminRole(req.user) || isExactHr(req.user))) {
     // no filter
   } else {
     where[Op.or] = [{ created_by: req.user.id }, { assigned_to: req.user.id }];
@@ -315,7 +315,7 @@ export const addTicketReply = asyncHandler(async (req, res) => {
 });
 
 export const assignTicket = asyncHandler(async (req, res) => {
-  if (!isAdminRole(req.user.role) && !isExactHr(req.user.role)) return fail(res, "Access denied", 403);
+  if (!isAdminRole(req.user) && !isExactHr(req.user)) return fail(res, "Access denied", 403);
   const ticket = await db.Tickets.findByPk(req.params.id);
   if (!ticket) return fail(res, "Ticket not found", 404);
   const assignedTo = Number(req.body.assigned_to);
@@ -371,8 +371,8 @@ export const assignTicket = asyncHandler(async (req, res) => {
 export const deleteTicket = asyncHandler(async (req, res) => {
   const ticket = await db.Tickets.findByPk(req.params.id);
   if (!ticket) return fail(res, "Ticket not found", 404);
-  const canDelete = isAdminRole(req.user.role)
-    || isExactHr(req.user.role)
+  const canDelete = isAdminRole(req.user)
+    || isExactHr(req.user)
     || (
       Number(ticket.created_by) === Number(req.user.id)
       && (ticket.assigned_to == null || Number(ticket.assigned_to) === Number(req.user.id) || ["open", "resolved", "closed"].includes(ticket.status))

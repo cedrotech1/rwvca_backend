@@ -5,6 +5,7 @@ import {
   isForceDeactivated,
   isPendingProfileActivation,
 } from "../utils/profileCompleteness.js";
+import { attachActingRoles } from "../services/actingRoleService.js";
 
 const User = db["Users"];
 
@@ -73,7 +74,7 @@ export const protect = asyncHandler(async (req, res, next) => {
       });
     }
 
-    req.user = user;
+    req.user = await attachActingRoles(user);
     return next();
   } catch (error) {
     console.error("JWT Verification Error:", error.message);
@@ -92,7 +93,7 @@ export const optionalProtect = asyncHandler(async (req, res, next) => {
         attributes: { exclude: ["password"] },
       });
       if (user && !isForceDeactivated(user)) {
-        req.user = user;
+        req.user = await attachActingRoles(user);
       }
     } catch (error) {
       console.error("JWT Verification Error (Optional Protect):", error.message);

@@ -28,7 +28,7 @@ async function loadNote(id) {
 }
 
 export const getEdNotes = asyncHandler(async (req, res) => {
-  const isEd = isEdRole(req.user.role) || isAdminRole(req.user.role);
+  const isEd = isEdRole(req.user) || isAdminRole(req.user);
   const pendingOnly = req.query.filter === "unreplied" || req.query.filter === "unseen";
   let where = { parent_id: null };
   if (req.query.module_type) where.module_type = req.query.module_type;
@@ -62,7 +62,7 @@ export const getEdNotes = asyncHandler(async (req, res) => {
 export const getEdNote = asyncHandler(async (req, res) => {
   const row = await loadNote(req.params.id);
   if (!row) return fail(res, "ED note not found", 404);
-  if (isEdRole(req.user.role) || isAdminRole(req.user.role)) {
+  if (isEdRole(req.user) || isAdminRole(req.user)) {
     await db.EdCommentEdSeen.findOrCreate({
       where: { ed_user_id: req.user.id, root_comment_id: row.id },
       defaults: {
@@ -76,7 +76,7 @@ export const getEdNote = asyncHandler(async (req, res) => {
 });
 
 export const createEdNote = asyncHandler(async (req, res) => {
-  if (!isEdRole(req.user.role) && !isAdminRole(req.user.role)) {
+  if (!isEdRole(req.user) && !isAdminRole(req.user)) {
     return fail(res, "Only the Executive Director can create ED notes", 403);
   }
   if (!req.body.module_type || !req.body.record_id || !req.body.message) {

@@ -39,16 +39,16 @@ function isSpecialCase(row) {
 
 function canAccessMission(user, row) {
   if (!row) return false;
-  if (isAdminRole(user.role) || isExecutiveRole(user.role)) return true;
+  if (isAdminRole(user) || isExecutiveRole(user)) return true;
   if (row.user_id === user.id) return true;
-  if (isExactHr(user.role)) return !isSpecialCase(row);
+  if (isExactHr(user)) return !isSpecialCase(row);
   return false;
 }
 
 function canEditMission(user, row) {
   const status = row.mission_requests_status;
-  if (isExactHr(user.role) && !isSpecialCase(row)) return true;
-  if (isExecutiveRole(user.role)) return status !== "approved";
+  if (isExactHr(user) && !isSpecialCase(row)) return true;
+  if (isExecutiveRole(user)) return status !== "approved";
   if (row.user_id === user.id) {
     return !["verified_by_hr", "approved", "rejected", "rejected_by_hr", "rejected_by_ed"].includes(status);
   }
@@ -56,12 +56,12 @@ function canEditMission(user, row) {
 }
 
 function canDeleteMission(user, row) {
-  if (isExactHr(user.role) && !isSpecialCase(row)) return true;
+  if (isExactHr(user) && !isSpecialCase(row)) return true;
   return row.user_id === user.id && row.mission_requests_status === "pending";
 }
 
 function isDesignatedApprover(user, row) {
-  return isExecutiveRole(user.role) && Number(row.executive_id) === Number(user.id);
+  return isExecutiveRole(user) && Number(row.executive_id) === Number(user.id);
 }
 
 function allowApprove(row) {
@@ -94,13 +94,13 @@ export const getMissions = asyncHandler(async (req, res) => {
   const where = {};
 
   if (tab === "received") {
-    if (!canReviewWorkflow(req.user.role)) {
+    if (!canReviewWorkflow(req.user)) {
       return fail(res, "Access denied", 403);
     }
-    if (isExactHr(req.user.role) || isAdminRole(req.user.role)) {
+    if (isExactHr(req.user) || isAdminRole(req.user)) {
       where.user_id = { [Op.ne]: req.user.id };
-    } else if (isExecutiveRole(req.user.role)) {
-      const counterpart = isEdRole(req.user.role) ? "Chairman" : "ED";
+    } else if (isExecutiveRole(req.user)) {
+      const counterpart = isEdRole(req.user) ? "Chairman" : "ED";
       where[Op.or] = [
         {
           hr_verification_status: "verified",
@@ -151,11 +151,11 @@ export const getMissions = asyncHandler(async (req, res) => {
 export const getMissionCounts = asyncHandler(async (req, res) => {
   const my = await db.MissionRequests.count({ where: { user_id: req.user.id } });
   let received = 0;
-  if (canReviewWorkflow(req.user.role)) {
-    if (isExactHr(req.user.role) || isAdminRole(req.user.role)) {
+  if (canReviewWorkflow(req.user)) {
+    if (isExactHr(req.user) || isAdminRole(req.user)) {
       received = await db.MissionRequests.count({ where: { user_id: { [Op.ne]: req.user.id } } });
     } else {
-      const counterpart = isEdRole(req.user.role) ? "Chairman" : "ED";
+      const counterpart = isEdRole(req.user) ? "Chairman" : "ED";
       received = await db.MissionRequests.count({
         include: [{ model: db.Users, as: "user", attributes: [] }],
         where: {
@@ -181,10 +181,10 @@ export const getMission = asyncHandler(async (req, res) => {
     permissions: {
       can_edit: canEditMission(req.user, row),
       can_delete: canDeleteMission(req.user, row),
-      can_hr_act: isExactHr(req.user.role) && !isSpecialCase(row),
+      can_hr_act: isExactHr(req.user) && !isSpecialCase(row),
       can_approve: isDesignatedApprover(req.user, row) && allowApprove(row),
       can_reject:
-        (isExactHr(req.user.role) && !isSpecialCase(row)) ||
+        (isExactHr(req.user) && !isSpecialCase(row)) ||
         (isDesignatedApprover(req.user, row) && allowApprove(row)),
       is_special_case: isSpecialCase(row),
     },
@@ -351,7 +351,7 @@ export const deleteMission = asyncHandler(async (req, res) => {
 export const verifyMissionByHr = asyncHandler(async (req, res) => {
   const row = await loadMission(req.params.id);
   if (!row) return fail(res, "Mission request not found", 404);
-  if (!isExactHr(req.user.role) || isSpecialCase(row)) return fail(res, "Access denied", 403);
+  if (!isExactHr(req.user) || isSpecialCase(row)) return fail(res, "Access denied", 403);
   if (!hasSignature(req.user)) {
     return fail(res, "Please upload your signature in profile settings before verifying requests.");
   }
@@ -394,7 +394,7 @@ export const verifyMissionByHr = asyncHandler(async (req, res) => {
 export const revertMissionByHr = asyncHandler(async (req, res) => {
   const row = await loadMission(req.params.id);
   if (!row) return fail(res, "Mission request not found", 404);
-  if (!isExactHr(req.user.role) || isSpecialCase(row)) return fail(res, "Access denied", 403);
+  if (!isExactHr(req.user) || isSpecialCase(row)) return fail(res, "Access denied", 403);
 
   const comment = String(req.body.comment || "").trim();
   await row.update({
@@ -468,7 +468,7 @@ export const rejectMission = asyncHandler(async (req, res) => {
   const row = await loadMission(req.params.id);
   if (!row) return fail(res, "Mission request not found", 404);
 
-  const hrCan = isExactHr(req.user.role) && !isSpecialCase(row);
+  const hrCan = isExactHr(req.user) && !isSpecialCase(row);
   const edCan = isDesignatedApprover(req.user, row);
   if (!hrCan && !edCan) return fail(res, "You cannot reject this mission request", 403);
 

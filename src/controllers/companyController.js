@@ -12,7 +12,7 @@ export const getCompanyInfo = asyncHandler(async (req, res) => {
 });
 
 export const updateCompanyInfo = asyncHandler(async (req, res) => {
-  if (!isAdminRole(req.user.role)) return fail(res, "Access denied", 403);
+  if (!isAdminRole(req.user)) return fail(res, "Access denied", 403);
   const body = req.body || {};
   if (!body.company_name || !body.email || !body.phone || !body.address) {
     return fail(res, "company_name, email, phone, and address are required");

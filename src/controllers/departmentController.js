@@ -12,7 +12,7 @@ export const getDepartments = asyncHandler(async (req, res) => {
 });
 
 export const createDepartment = asyncHandler(async (req, res) => {
-  if (!canManageUsers(req.user.role)) return fail(res, "Access denied", 403);
+  if (!canManageUsers(req.user)) return fail(res, "Access denied", 403);
   const name = String(req.body.name || "").trim();
   if (!name) return fail(res, "Department name is required");
   const exists = await Department.findOne({ where: { name } });
@@ -23,7 +23,7 @@ export const createDepartment = asyncHandler(async (req, res) => {
 });
 
 export const updateDepartment = asyncHandler(async (req, res) => {
-  if (!canManageUsers(req.user.role)) return fail(res, "Access denied", 403);
+  if (!canManageUsers(req.user)) return fail(res, "Access denied", 403);
   const row = await Department.findByPk(req.params.id);
   if (!row) return fail(res, "Department not found", 404);
   const name = String(req.body.name || "").trim();
@@ -34,7 +34,7 @@ export const updateDepartment = asyncHandler(async (req, res) => {
 });
 
 export const deleteDepartment = asyncHandler(async (req, res) => {
-  if (!canManageUsers(req.user.role)) return fail(res, "Access denied", 403);
+  if (!canManageUsers(req.user)) return fail(res, "Access denied", 403);
   const row = await Department.findByPk(req.params.id);
   if (!row) return fail(res, "Department not found", 404);
   const userCount = await db.Users.count({ where: { department_ID: row.id } });

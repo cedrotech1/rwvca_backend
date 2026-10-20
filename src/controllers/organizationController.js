@@ -29,7 +29,7 @@ export const getOrganizationUnit = asyncHandler(async (req, res) => {
 });
 
 export const createOrganizationUnit = asyncHandler(async (req, res) => {
-  if (!isAdminRole(req.user.role)) return fail(res, "Access denied", 403);
+  if (!isAdminRole(req.user)) return fail(res, "Access denied", 403);
   if (!req.body.unit_name || !req.body.unit_key || !req.body.level || !req.body.title || !req.body.content) {
     return fail(res, "unit_name, unit_key, level, title, and content are required");
   }
@@ -47,7 +47,7 @@ export const createOrganizationUnit = asyncHandler(async (req, res) => {
 });
 
 export const updateOrganizationUnit = asyncHandler(async (req, res) => {
-  if (!isAdminRole(req.user.role)) return fail(res, "Access denied", 403);
+  if (!isAdminRole(req.user)) return fail(res, "Access denied", 403);
   const row = await db.OrganizationStructure.findByPk(req.params.id);
   if (!row) return fail(res, "Organization unit not found", 404);
   await row.update({
@@ -63,7 +63,7 @@ export const updateOrganizationUnit = asyncHandler(async (req, res) => {
 });
 
 export const deleteOrganizationUnit = asyncHandler(async (req, res) => {
-  if (!isAdminRole(req.user.role)) return fail(res, "Access denied", 403);
+  if (!isAdminRole(req.user)) return fail(res, "Access denied", 403);
   const row = await db.OrganizationStructure.findByPk(req.params.id);
   if (!row) return fail(res, "Organization unit not found", 404);
   await row.destroy();

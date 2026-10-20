@@ -95,7 +95,7 @@ async function notifyLogistics(title, message, id, { actor, intro, note, actionR
 export const getAssets = asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req);
   const where = {};
-  const isLogistics = canManageAssets(req.user.role);
+  const isLogistics = canManageAssets(req.user);
   const search = String(req.query.search || "").trim();
   const searchType = String(req.query.search_type || "all").toLowerCase();
   if (req.query.status) where.status = req.query.status;
@@ -153,7 +153,7 @@ export const getAssets = asyncHandler(async (req, res) => {
 export const getAsset = asyncHandler(async (req, res) => {
   const row = await loadAsset(req.params.id);
   if (!row) return fail(res, "Asset not found", 404);
-  if (!canManageAssets(req.user.role) && Number(row.user_id) !== Number(req.user.id)) {
+  if (!canManageAssets(req.user) && Number(row.user_id) !== Number(req.user.id)) {
     return fail(res, "Access denied", 403);
   }
   return ok(res, row);
@@ -162,7 +162,7 @@ export const getAsset = asyncHandler(async (req, res) => {
 export const createAsset = asyncHandler(async (req, res) => {
   if (!req.body.name) return fail(res, "name is required");
   if (!req.body.asset_type_id) return fail(res, "asset_type_id is required");
-  const isLogistics = canManageAssets(req.user.role);
+  const isLogistics = canManageAssets(req.user);
   const requestedLocation = req.body.initial_location || req.body.location || "user";
   const location = isLogistics ? requestedLocation : "user";
   if (!["office", "user"].includes(location)) {
@@ -194,7 +194,7 @@ export const createAsset = asyncHandler(async (req, res) => {
 });
 
 export const updateAsset = asyncHandler(async (req, res) => {
-  const isLogistics = canManageAssets(req.user.role);
+  const isLogistics = canManageAssets(req.user);
   const row = await db.Assets.findByPk(req.params.id);
   if (!row) return fail(res, "Asset not found", 404);
   const isAllowedUserEdit = Number(row.user_id) === Number(req.user.id) && row.revert_status === "yes" && row.status !== "returned";
@@ -225,7 +225,7 @@ export const updateAsset = asyncHandler(async (req, res) => {
 });
 
 export const issueAsset = asyncHandler(async (req, res) => {
-  if (!canManageAssets(req.user.role)) return fail(res, "Access denied", 403);
+  if (!canManageAssets(req.user)) return fail(res, "Access denied", 403);
   const row = await db.Assets.findByPk(req.params.id);
   if (!row) return fail(res, "Asset not found", 404);
   if (!req.body.user_id) return fail(res, "user_id is required");
@@ -241,7 +241,7 @@ export const issueAsset = asyncHandler(async (req, res) => {
 });
 
 export const returnAsset = asyncHandler(async (req, res) => {
-  if (!canManageAssets(req.user.role)) return fail(res, "Access denied", 403);
+  if (!canManageAssets(req.user)) return fail(res, "Access denied", 403);
   const row = await db.Assets.findByPk(req.params.id);
   if (!row) return fail(res, "Asset not found", 404);
   if (row.status !== "issued") return fail(res, "No changes made or asset not issued.");
@@ -263,7 +263,7 @@ export const returnAsset = asyncHandler(async (req, res) => {
 });
 
 export const deleteAsset = asyncHandler(async (req, res) => {
-  if (!canManageAssets(req.user.role)) return fail(res, "Access denied", 403);
+  if (!canManageAssets(req.user)) return fail(res, "Access denied", 403);
   const row = await db.Assets.findByPk(req.params.id);
   if (!row) return fail(res, "Asset not found", 404);
   const assignedUserId = row.user_id;
@@ -280,7 +280,7 @@ export const deleteAsset = asyncHandler(async (req, res) => {
 });
 
 export const requestAssetEdit = asyncHandler(async (req, res) => {
-  if (canManageAssets(req.user.role)) return fail(res, "Invalid request.", 400);
+  if (canManageAssets(req.user)) return fail(res, "Invalid request.", 400);
   const row = await db.Assets.findByPk(req.params.id);
   if (!row || Number(row.user_id) !== Number(req.user.id) || row.revert_status !== "no") {
     return fail(res, "Invalid request.", 400);
@@ -298,7 +298,7 @@ export const requestAssetEdit = asyncHandler(async (req, res) => {
 });
 
 export const approveAssetEdit = asyncHandler(async (req, res) => {
-  if (!canManageAssets(req.user.role)) return fail(res, "Access denied", 403);
+  if (!canManageAssets(req.user)) return fail(res, "Access denied", 403);
   const row = await db.Assets.findByPk(req.params.id);
   if (!row || row.revert_status !== "requested") return fail(res, "Invalid request.", 400);
   await row.update({ revert_status: "yes" });
@@ -314,7 +314,7 @@ export const approveAssetEdit = asyncHandler(async (req, res) => {
 });
 
 export const rejectAssetEdit = asyncHandler(async (req, res) => {
-  if (!canManageAssets(req.user.role)) return fail(res, "Access denied", 403);
+  if (!canManageAssets(req.user)) return fail(res, "Access denied", 403);
   const row = await db.Assets.findByPk(req.params.id);
   if (!row || row.revert_status !== "requested") return fail(res, "Invalid request.", 400);
   const reason = String(req.body.reason || "").trim();

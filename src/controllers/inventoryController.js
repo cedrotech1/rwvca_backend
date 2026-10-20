@@ -49,7 +49,7 @@ export const getInventoryItem = asyncHandler(async (req, res) => {
 });
 
 export const createInventoryItem = asyncHandler(async (req, res) => {
-  if (!canManageInventory(req.user.role)) return fail(res, "Access denied", 403);
+  if (!canManageInventory(req.user)) return fail(res, "Access denied", 403);
   if (!req.body.name) return fail(res, "name is required");
   const row = await db.InventoryItems.create({
     name: req.body.name,
@@ -75,7 +75,7 @@ export const createInventoryItem = asyncHandler(async (req, res) => {
 });
 
 export const updateInventoryItem = asyncHandler(async (req, res) => {
-  if (!canManageInventory(req.user.role)) return fail(res, "Access denied", 403);
+  if (!canManageInventory(req.user)) return fail(res, "Access denied", 403);
   const row = await db.InventoryItems.findByPk(req.params.id);
   if (!row) return fail(res, "Inventory item not found", 404);
   await row.update({
@@ -89,7 +89,7 @@ export const updateInventoryItem = asyncHandler(async (req, res) => {
 });
 
 export const addInventoryTransaction = asyncHandler(async (req, res) => {
-  if (!canManageInventory(req.user.role)) return fail(res, "Access denied", 403);
+  if (!canManageInventory(req.user)) return fail(res, "Access denied", 403);
   const row = await db.InventoryItems.findByPk(req.params.id);
   if (!row) return fail(res, "Inventory item not found", 404);
   const type = req.body.type === "out" ? "out" : "in";
@@ -110,7 +110,7 @@ export const addInventoryTransaction = asyncHandler(async (req, res) => {
 });
 
 export const deleteInventoryItem = asyncHandler(async (req, res) => {
-  if (!canManageInventory(req.user.role)) return fail(res, "Access denied", 403);
+  if (!canManageInventory(req.user)) return fail(res, "Access denied", 403);
   const row = await db.InventoryItems.findByPk(req.params.id);
   if (!row) return fail(res, "Inventory item not found", 404);
   await db.InventoryTransactions.destroy({ where: { item_id: row.id } });
@@ -162,7 +162,7 @@ export const getInventorySummary = asyncHandler(async (_req, res) => {
 });
 
 export const deleteInventoryTransaction = asyncHandler(async (req, res) => {
-  if (!canManageInventory(req.user.role)) return fail(res, "Access denied", 403);
+  if (!canManageInventory(req.user)) return fail(res, "Access denied", 403);
   const row = await db.InventoryTransactions.findByPk(req.params.transactionId);
   if (!row) return fail(res, "Transaction not found", 404);
   await row.destroy();
@@ -171,7 +171,7 @@ export const deleteInventoryTransaction = asyncHandler(async (req, res) => {
 });
 
 export const truncateInventory = asyncHandler(async (req, res) => {
-  if (!canManageInventory(req.user.role)) return fail(res, "Access denied", 403);
+  if (!canManageInventory(req.user)) return fail(res, "Access denied", 403);
   await db.InventoryTransactions.destroy({ where: {}, truncate: true, cascade: true, restartIdentity: true });
   await db.InventoryItems.destroy({ where: {}, truncate: true, cascade: true, restartIdentity: true });
   await createLog(req.user.id, "truncate_inventory", "Truncated all inventory data");

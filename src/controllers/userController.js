@@ -9,6 +9,11 @@ import { canManageUsers, canReviewWorkflow, isAdminRole } from "../utils/roleHel
 import { createNotification, notifyStaff } from "../services/notificationService.js";
 import { buildEmailPayload } from "../services/emailNotificationHelpers.js";
 import { buildEmployeeAnalysis, buildEmployeesOverview } from "../services/employeeAnalysisService.js";
+import {
+  getActingRolesMap,
+  setActingRoles,
+  withEffectiveRoles,
+} from "../services/actingRoleService.js";
 import Email from "../utils/mailer.js";
 
 const Users = db.Users;
@@ -18,15 +23,36 @@ function normalizeRole(role) {
   return String(role || "").trim().toLowerCase();
 }
 
-function assertCanAssignRole(actorRole, targetCurrentRole, nextRole) {
+function parseActingRoles(body) {
+  if (!body || body.acting_roles === undefined) return undefined;
+  if (Array.isArray(body.acting_roles)) return body.acting_roles;
+  if (typeof body.acting_roles === "string") {
+    return body.acting_roles
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function assertCanAssignRole(actor, targetCurrentRole, nextRole) {
   const next = normalizeRole(nextRole);
   const current = normalizeRole(targetCurrentRole);
   if (!next) return null;
-  if (isAdminRole(current) && !isAdminRole(actorRole)) {
+  if (isAdminRole(current) && !isAdminRole(actor)) {
     return "Only an administrator can edit admin accounts";
   }
-  if (next === "admin" && !isAdminRole(actorRole)) {
+  if (next === "admin" && !isAdminRole(actor)) {
     return "Only an administrator can grant Admin access";
+  }
+  return null;
+}
+
+function assertCanAssignActingRoles(actor, roles) {
+  const list = Array.isArray(roles) ? roles : [];
+  for (const role of list) {
+    const err = assertCanAssignRole(actor, null, role);
+    if (err) return err;
   }
   return null;
 }
@@ -39,7 +65,7 @@ function canViewEmployeeAnalysis(viewer, targetUserId) {
   const viewerId = Number(viewer?.id);
   const targetId = Number(targetUserId);
   if (viewerId === targetId) return true;
-  return canManageUsers(viewer?.role) || canReviewWorkflow(viewer?.role);
+  return canManageUsers(viewer) || canReviewWorkflow(viewer);
 }
 
 export const getMyEmployeeAnalysis = asyncHandler(async (req, res) => {
@@ -49,7 +75,7 @@ export const getMyEmployeeAnalysis = asyncHandler(async (req, res) => {
 });
 
 export const getEmployeesOverview = asyncHandler(async (req, res) => {
-  if (!canManageUsers(req.user.role) && !canReviewWorkflow(req.user.role)) {
+  if (!canManageUsers(req.user) && !canReviewWorkflow(req.user)) {
     return fail(res, "Access denied", 403);
   }
   const data = await buildEmployeesOverview(req.query);
@@ -82,7 +108,7 @@ export const getAllUsers = asyncHandler(async (req, res) => {
   if (req.query.role) where.role = req.query.role;
   if (req.query.department_id) where.department_ID = req.query.department_id;
   if (req.query.active !== undefined && req.query.active !== "") where.active = Number(req.query.active);
-  if (String(req.user.role || "").toLowerCase() !== "admin") {
+  if (!isAdminRole(req.user)) {
     where.role = where.role || { [Op.ne]: "admin" };
   }
 
@@ -96,7 +122,12 @@ export const getAllUsers = asyncHandler(async (req, res) => {
     distinct: true,
   });
 
-  return ok(res, { items: rows, pagination: paginationMeta(count, page, limit) });
+  const actingMap = await getActingRolesMap(rows.map((row) => row.id));
+  const items = rows.map((row) =>
+    withEffectiveRoles(row, actingMap.get(Number(row.id)) || [])
+  );
+
+  return ok(res, { items, pagination: paginationMeta(count, page, limit) });
 });
 
 export const getOneUser = asyncHandler(async (req, res) => {
@@ -105,7 +136,8 @@ export const getOneUser = asyncHandler(async (req, res) => {
     include: [{ model: db.Department, as: "department", attributes: ["id", "name"] }],
   });
   if (!user) return fail(res, "User not found", 404);
-  return ok(res, user);
+  const acting = (await getActingRolesMap([user.id])).get(Number(user.id)) || [];
+  return ok(res, withEffectiveRoles(user, acting));
 });
 
 export const getUsersByDepartment = asyncHandler(async (req, res) => {
@@ -123,7 +155,7 @@ export const getUsersByDepartment = asyncHandler(async (req, res) => {
 });
 
 export const addUser = asyncHandler(async (req, res) => {
-  if (!canManageUsers(req.user.role)) return fail(res, "Access denied", 403);
+  if (!canManageUsers(req.user)) return fail(res, "Access denied", 403);
 
   const body = req.body || {};
   if (!body.names || !body.email || !body.role) {
@@ -131,8 +163,12 @@ export const addUser = asyncHandler(async (req, res) => {
   }
   if (!body.department_ID) return fail(res, "Department is required");
 
-  const roleError = assertCanAssignRole(req.user.role, null, body.role);
+  const roleError = assertCanAssignRole(req.user, null, body.role);
   if (roleError) return fail(res, roleError, 403);
+
+  const actingRoles = parseActingRoles(body) || [];
+  const actingError = assertCanAssignActingRoles(req.user, actingRoles);
+  if (actingError) return fail(res, actingError, 403);
 
   const exists = await Users.findOne({
     where: db.sequelize.where(
@@ -169,6 +205,8 @@ export const addUser = asyncHandler(async (req, res) => {
     allowed_leave_days: body.allowed_leave_days || 0,
   });
 
+  const savedActing = await setActingRoles(user.id, actingRoles, body.role);
+
   if (body.allowed_leave_days) {
     await db.UserAllowedDays.findOrCreate({
       where: { user_id: user.id, year: new Date().getFullYear() },
@@ -201,7 +239,7 @@ export const addUser = asyncHandler(async (req, res) => {
     whatsapp: false,
   });
 
-  const safe = user.toJSON();
+  const safe = withEffectiveRoles(user, savedActing);
   delete safe.password;
   delete safe.resetcode;
   return created(res, { user: safe, generated_password: body.password ? undefined : plainPassword }, "User created");
@@ -209,7 +247,7 @@ export const addUser = asyncHandler(async (req, res) => {
 
 export const updateUser = asyncHandler(async (req, res) => {
   const isSelf = Number(req.params.id) === Number(req.user.id);
-  if (!isSelf && !canManageUsers(req.user.role)) {
+  if (!isSelf && !canManageUsers(req.user)) {
     return fail(res, "Access denied", 403);
   }
 
@@ -220,7 +258,11 @@ export const updateUser = asyncHandler(async (req, res) => {
   delete body.password;
   delete body.resetcode;
   delete body.id;
-  if (!canManageUsers(req.user.role)) {
+  const actingRolesInput = parseActingRoles(body);
+  delete body.acting_roles;
+  delete body.effective_roles;
+
+  if (!canManageUsers(req.user)) {
     delete body.role;
     delete body.active;
     delete body.force_deactivated;
@@ -228,10 +270,14 @@ export const updateUser = asyncHandler(async (req, res) => {
     delete body.deleted;
   } else {
     if (body.role !== undefined) {
-      const roleError = assertCanAssignRole(req.user.role, user.role, body.role);
+      const roleError = assertCanAssignRole(req.user, user.role, body.role);
       if (roleError) return fail(res, roleError, 403);
-    } else if (isAdminRole(user.role) && !isAdminRole(req.user.role)) {
+    } else if (isAdminRole(user) && !isAdminRole(req.user)) {
       return fail(res, "Only an administrator can edit admin accounts", 403);
+    }
+    if (actingRolesInput !== undefined) {
+      const actingError = assertCanAssignActingRoles(req.user, actingRolesInput);
+      if (actingError) return fail(res, actingError, 403);
     }
     if (body.active !== undefined) {
       if (Number(body.active) === 1) {
@@ -244,8 +290,18 @@ export const updateUser = asyncHandler(async (req, res) => {
   }
 
   await user.update(body);
+  let acting = undefined;
+  if (canManageUsers(req.user) && actingRolesInput !== undefined) {
+    acting = await setActingRoles(
+      user.id,
+      actingRolesInput,
+      body.role !== undefined ? body.role : user.role
+    );
+  } else {
+    acting = (await getActingRolesMap([user.id])).get(Number(user.id)) || [];
+  }
   await createLog(req.user.id, "update_user", `Updated user #${user.id}`);
-  if (canManageUsers(req.user.role) && !isSelf) {
+  if (canManageUsers(req.user) && !isSelf) {
     await createNotification({
       whatsapp: true,
       receiverId: user.id,
@@ -261,14 +317,14 @@ export const updateUser = asyncHandler(async (req, res) => {
       }),
     });
   }
-  const safe = user.toJSON();
+  const safe = withEffectiveRoles(user, acting);
   delete safe.password;
   delete safe.resetcode;
   return ok(res, safe, "User updated");
 });
 
 export const deleteUser = asyncHandler(async (req, res) => {
-  if (!canManageUsers(req.user.role)) return fail(res, "Access denied", 403);
+  if (!canManageUsers(req.user)) return fail(res, "Access denied", 403);
   const user = await Users.findByPk(req.params.id);
   if (!user) return fail(res, "User not found", 404);
   await user.update({ deleted: "1", active: 0, force_deactivated: 1, deleted_at: new Date() });
@@ -290,7 +346,7 @@ export const deleteUser = asyncHandler(async (req, res) => {
 });
 
 export const restoreUser = asyncHandler(async (req, res) => {
-  if (!canManageUsers(req.user.role)) return fail(res, "Access denied", 403);
+  if (!canManageUsers(req.user)) return fail(res, "Access denied", 403);
   const user = await Users.findByPk(req.params.id);
   if (!user) return fail(res, "User not found", 404);
   await user.update({ deleted: "0", active: 1, force_deactivated: 0, deleted_at: null });
@@ -313,7 +369,7 @@ export const restoreUser = asyncHandler(async (req, res) => {
 
 export const setUserActive = (active) =>
   asyncHandler(async (req, res) => {
-    if (!canManageUsers(req.user.role)) return fail(res, "Access denied", 403);
+    if (!canManageUsers(req.user)) return fail(res, "Access denied", 403);
     const user = await Users.findByPk(req.params.id);
     if (!user || String(user.deleted) === "1") return fail(res, "User not found", 404);
 
@@ -358,7 +414,7 @@ export const setUserActive = (active) =>
 
 export const setSignatureApproved = (approved) =>
   asyncHandler(async (req, res) => {
-    if (!canManageUsers(req.user.role)) return fail(res, "Access denied", 403);
+    if (!canManageUsers(req.user)) return fail(res, "Access denied", 403);
     const user = await Users.findByPk(req.params.id);
     if (!user || String(user.deleted) === "1") return fail(res, "User not found", 404);
     await user.update({ signature_approved: approved ? "1" : "0" });
@@ -387,7 +443,7 @@ export const setSignatureApproved = (approved) =>
   });
 
 export const getUserLeaveDays = asyncHandler(async (req, res) => {
-  if (!canManageUsers(req.user.role) && Number(req.params.id) !== Number(req.user.id)) {
+  if (!canManageUsers(req.user) && Number(req.params.id) !== Number(req.user.id)) {
     return fail(res, "Access denied", 403);
   }
   const items = await db.UserAllowedDays.findAll({
@@ -398,7 +454,7 @@ export const getUserLeaveDays = asyncHandler(async (req, res) => {
 });
 
 export const saveUserLeaveDays = asyncHandler(async (req, res) => {
-  if (!canManageUsers(req.user.role)) return fail(res, "Access denied", 403);
+  if (!canManageUsers(req.user)) return fail(res, "Access denied", 403);
   const year = Number(req.body.year || new Date().getFullYear());
   const allowed_days = Number(req.body.allowed_days || 0);
   const [row] = await db.UserAllowedDays.findOrCreate({
@@ -411,7 +467,7 @@ export const saveUserLeaveDays = asyncHandler(async (req, res) => {
 });
 
 export const deleteUserLeaveDays = asyncHandler(async (req, res) => {
-  if (!canManageUsers(req.user.role)) return fail(res, "Access denied", 403);
+  if (!canManageUsers(req.user)) return fail(res, "Access denied", 403);
   const row = await db.UserAllowedDays.findOne({
     where: { id: req.params.leaveId, user_id: req.params.id },
   });
@@ -421,12 +477,12 @@ export const deleteUserLeaveDays = asyncHandler(async (req, res) => {
 });
 
 export const adminResetPassword = asyncHandler(async (req, res) => {
-  if (!canManageUsers(req.user.role)) return fail(res, "Access denied", 403);
+  if (!canManageUsers(req.user)) return fail(res, "Access denied", 403);
 
   const user = await Users.findByPk(req.params.id);
   if (!user || String(user.deleted) === "1") return fail(res, "User not found", 404);
 
-  if (isAdminRole(user.role) && !isAdminRole(req.user.role)) {
+  if (isAdminRole(user) && !isAdminRole(req.user)) {
     return fail(res, "Only an administrator can reset an admin account password", 403);
   }
 

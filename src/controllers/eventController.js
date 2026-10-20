@@ -33,7 +33,7 @@ export const getEvent = asyncHandler(async (req, res) => {
 });
 
 export const createEvent = asyncHandler(async (req, res) => {
-  if (!isAdminRole(req.user.role)) return fail(res, "Access denied", 403);
+  if (!isAdminRole(req.user)) return fail(res, "Access denied", 403);
   let image = req.body.image;
   try {
     const saved = saveRequestFile(req, "events", { prefix: "event", fieldNames: ["image", "file"] });
@@ -60,7 +60,7 @@ export const createEvent = asyncHandler(async (req, res) => {
 });
 
 export const updateEvent = asyncHandler(async (req, res) => {
-  if (!isAdminRole(req.user.role)) return fail(res, "Access denied", 403);
+  if (!isAdminRole(req.user)) return fail(res, "Access denied", 403);
   const row = await db.Events.findByPk(req.params.id);
   if (!row) return fail(res, "Event not found", 404);
   let image = req.body.image || row.image;
@@ -81,7 +81,7 @@ export const updateEvent = asyncHandler(async (req, res) => {
 });
 
 export const addEventImage = asyncHandler(async (req, res) => {
-  if (!isAdminRole(req.user.role)) return fail(res, "Access denied", 403);
+  if (!isAdminRole(req.user)) return fail(res, "Access denied", 403);
   const row = await db.Events.findByPk(req.params.id);
   if (!row) return fail(res, "Event not found", 404);
   if (!req.body.url) {
@@ -98,7 +98,7 @@ export const addEventImage = asyncHandler(async (req, res) => {
 });
 
 export const deleteEventImage = asyncHandler(async (req, res) => {
-  if (!isAdminRole(req.user.role)) return fail(res, "Access denied", 403);
+  if (!isAdminRole(req.user)) return fail(res, "Access denied", 403);
   const image = await db.EventImages.findOne({ where: { id: req.params.imageId, eid: req.params.id } });
   if (!image) return fail(res, "Event image not found", 404);
   await image.destroy();
@@ -106,7 +106,7 @@ export const deleteEventImage = asyncHandler(async (req, res) => {
 });
 
 export const deleteEvent = asyncHandler(async (req, res) => {
-  if (!isAdminRole(req.user.role)) return fail(res, "Access denied", 403);
+  if (!isAdminRole(req.user)) return fail(res, "Access denied", 403);
   const row = await db.Events.findByPk(req.params.id);
   if (!row) return fail(res, "Event not found", 404);
   await db.EventImages.destroy({ where: { eid: row.id } });

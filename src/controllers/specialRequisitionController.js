@@ -50,7 +50,7 @@ function normalizeStatus(status) {
 }
 
 function canAccess(user, row) {
-  if (isAdminRole(user.role) || isExecutiveRole(user.role) || isLogisticRole(user.role)) return true;
+  if (isAdminRole(user) || isExecutiveRole(user) || isLogisticRole(user)) return true;
   const id = Number(user.id);
   return [row.prepared_by, row.sended_to, row.coordinator_id, row.executive_id, row.viewer_id].some(
     (value) => Number(value) === id
@@ -80,13 +80,13 @@ export const getVehicleUtilizations = asyncHandler(async (req, res) => {
   const where = {};
 
   if (tab === "received") {
-    if (!isLogisticRole(req.user.role) && !isExecutiveRole(req.user.role) && !isAdminRole(req.user.role)) {
+    if (!isLogisticRole(req.user) && !isExecutiveRole(req.user) && !isAdminRole(req.user)) {
       return fail(res, "Access denied", 403);
     }
-    if (!isExecutiveRole(req.user.role)) {
+    if (!isExecutiveRole(req.user)) {
       where.prepared_by = { [Op.ne]: req.user.id };
     }
-  } else if (tab === "all" && (isAdminRole(req.user.role) || isExecutiveRole(req.user.role) || isLogisticRole(req.user.role))) {
+  } else if (tab === "all" && (isAdminRole(req.user) || isExecutiveRole(req.user) || isLogisticRole(req.user))) {
     // no owner filter
   } else {
     where.prepared_by = req.user.id;
@@ -131,9 +131,9 @@ export const getVehicleUtilization = asyncHandler(async (req, res) => {
     status,
     permissions: {
       can_edit: Number(row.prepared_by) === Number(req.user.id) && ["reverted", "pending", "edited"].includes(status),
-      can_logistic_act: isLogisticRole(req.user.role) && ["pending", "verification_process"].includes(status),
+      can_logistic_act: isLogisticRole(req.user) && ["pending", "verification_process"].includes(status),
       can_executive_act: isDirect && Number(row.executive_id) === Number(req.user.id) && status === "pending",
-      can_ed_authorize: isEdRole(req.user.role) && !row.authorized_by && ["verification_process", "approved"].includes(status),
+      can_ed_authorize: isEdRole(req.user) && !row.authorized_by && ["verification_process", "approved"].includes(status),
     },
   });
 });
@@ -271,9 +271,9 @@ export const updateVehicleUtilizationStatus = asyncHandler(async (req, res) => {
   const comment = String(req.body.comment || "").trim();
   const reason = String(req.body.reason || comment || "").trim();
   const isDirect = !row.coordinator_id && isDirectApplicant(row.preparer?.role);
-  const canLogistic = isLogisticRole(req.user.role);
+  const canLogistic = isLogisticRole(req.user);
   const canExecutive = isDirect && Number(row.executive_id) === Number(req.user.id);
-  if (!canLogistic && !canExecutive && !isAdminRole(req.user.role)) {
+  if (!canLogistic && !canExecutive && !isAdminRole(req.user)) {
     return fail(res, "Only Logistic (Membership Coordinator) can perform this action.", 403);
   }
   if (!((TRANSITIONS[current] || []).includes(status))) {
@@ -355,7 +355,7 @@ export const updateVehicleUtilizationStatus = asyncHandler(async (req, res) => {
 export const authorizeVehicleUtilization = asyncHandler(async (req, res) => {
   const row = await db.SpecialRequisitions.findByPk(req.params.id);
   if (!row) return fail(res, "Vehicle utilization not found", 404);
-  if (!isEdRole(req.user.role)) return fail(res, "Only the Executive Director can authorize", 403);
+  if (!isEdRole(req.user)) return fail(res, "Only the Executive Director can authorize", 403);
   const status = normalizeStatus(row.status);
   if (row.authorized_by) return fail(res, "This request is already authorized");
   if (!["verification_process", "approved"].includes(status)) {

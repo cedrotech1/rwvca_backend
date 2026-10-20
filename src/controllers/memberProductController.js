@@ -46,7 +46,7 @@ export const getMemberProduct = asyncHandler(async (req, res) => {
 });
 
 export const createMemberProduct = asyncHandler(async (req, res) => {
-  if (!canManage(req.user.role)) return fail(res, "Access denied", 403);
+  if (!canManage(req.user)) return fail(res, "Access denied", 403);
   if (!req.body.product_name || !req.body.company_name) {
     return fail(res, "product_name and company_name are required");
   }
@@ -78,7 +78,7 @@ export const createMemberProduct = asyncHandler(async (req, res) => {
 });
 
 export const updateMemberProduct = asyncHandler(async (req, res) => {
-  if (!canManage(req.user.role)) return fail(res, "Access denied", 403);
+  if (!canManage(req.user)) return fail(res, "Access denied", 403);
   const row = await db.MemberProducts.findByPk(req.params.id);
   if (!row) return fail(res, "Member product not found", 404);
   const payload = { ...req.body };
@@ -98,7 +98,7 @@ export const updateMemberProduct = asyncHandler(async (req, res) => {
 });
 
 export const deleteMemberProduct = asyncHandler(async (req, res) => {
-  if (!canManage(req.user.role)) return fail(res, "Access denied", 403);
+  if (!canManage(req.user)) return fail(res, "Access denied", 403);
   const row = await db.MemberProducts.findByPk(req.params.id);
   if (!row) return fail(res, "Member product not found", 404);
   await row.destroy();

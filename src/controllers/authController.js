@@ -13,6 +13,7 @@ import {
   isPendingProfileActivation,
   isProfileComplete,
 } from "../utils/profileCompleteness.js";
+import { attachActingRoles } from "../services/actingRoleService.js";
 const { saveRequestFile } = fileStorage;
 
 const Users = db.Users;
@@ -32,8 +33,8 @@ function isDeleted(user) {
   return value === "1" || value.toLowerCase() === "yes";
 }
 
-function withAccountFlags(user) {
-  const safe = typeof user.toJSON === "function" ? user.toJSON() : { ...user };
+async function withAccountFlags(user) {
+  const safe = await attachActingRoles(user);
   delete safe.password;
   delete safe.resetcode;
   const missing = getMissingProfileFields(safe);
@@ -88,7 +89,7 @@ export const login = asyncHandler(async (req, res) => {
       : `User ${user.names} signed in`
   );
 
-  const safe = withAccountFlags(user);
+  const safe = await withAccountFlags(user);
   return ok(
     res,
     { token: signToken(user), user: safe },
@@ -103,7 +104,7 @@ export const me = asyncHandler(async (req, res) => {
     attributes: USER_SAFE,
     include: [{ model: db.Department, as: "department", attributes: ["id", "name"] }],
   });
-  return ok(res, withAccountFlags(user));
+  return ok(res, await withAccountFlags(user));
 });
 
 export const logout = asyncHandler(async (req, res) => {
@@ -265,7 +266,7 @@ export const updateProfile = asyncHandler(async (req, res) => {
     await createLog(user.id, "update_profile", "Updated profile");
   }
 
-  return ok(res, withAccountFlags(user), message);
+  return ok(res, await withAccountFlags(user), message);
 });
 
 export const updateSignature = asyncHandler(async (req, res) => {
@@ -297,5 +298,5 @@ export const updateSignature = asyncHandler(async (req, res) => {
     await createLog(user.id, "update_signature", "Updated signature");
   }
 
-  return ok(res, withAccountFlags(user), message);
+  return ok(res, await withAccountFlags(user), message);
 });

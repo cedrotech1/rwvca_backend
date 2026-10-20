@@ -48,14 +48,14 @@ function isSpecialCase(row) {
 }
 
 function canAccessLeave(user, row) {
-  if (isAdminRole(user.role) || isExecutiveRole(user.role)) return true;
+  if (isAdminRole(user) || isExecutiveRole(user)) return true;
   if (row.user_id === user.id) return true;
-  if (isExactHr(user.role)) return !isSpecialCase(row);
+  if (isExactHr(user)) return !isSpecialCase(row);
   return false;
 }
 
 function isDesignatedApprover(user, row) {
-  return isExecutiveRole(user.role) && Number(row.executive_id) === Number(user.id);
+  return isExecutiveRole(user) && Number(row.executive_id) === Number(user.id);
 }
 
 function allowApprove(row) {
@@ -84,14 +84,14 @@ async function loadLeave(id) {
 export { getLeaveBalance } from "../services/leaveBalanceService.js";
 
 export const getMyLeaveBalance = asyncHandler(async (req, res) => {
-  const userId = req.query.user_id && canReviewWorkflow(req.user.role)
+  const userId = req.query.user_id && canReviewWorkflow(req.user)
     ? Number(req.query.user_id)
     : req.user.id;
   return ok(res, await getLeaveBalance(userId));
 });
 
 export const checkLeaveSchedule = asyncHandler(async (req, res) => {
-  const userId = req.query.user_id && canReviewWorkflow(req.user.role)
+  const userId = req.query.user_id && canReviewWorkflow(req.user)
     ? Number(req.query.user_id)
     : req.user.id;
   const leave_from = req.query.leave_from;
@@ -108,7 +108,7 @@ export const checkLeaveSchedule = asyncHandler(async (req, res) => {
 });
 
 export const getLeaveAnalytics = asyncHandler(async (req, res) => {
-  if (!isExactHr(req.user.role) && !isAdminRole(req.user.role) && !isExecutiveRole(req.user.role)) {
+  if (!isExactHr(req.user) && !isAdminRole(req.user) && !isExecutiveRole(req.user)) {
     return fail(res, "Access denied", 403);
   }
   const data = await buildLeaveAnalytics(req.query);
@@ -122,11 +122,11 @@ export const getLeaveRequests = asyncHandler(async (req, res) => {
   const where = {};
 
   if (tab === "received") {
-    if (!canReviewWorkflow(req.user.role)) return fail(res, "Access denied", 403);
-    if (isExactHr(req.user.role) || isAdminRole(req.user.role)) {
+    if (!canReviewWorkflow(req.user)) return fail(res, "Access denied", 403);
+    if (isExactHr(req.user) || isAdminRole(req.user)) {
       where.user_id = { [Op.ne]: req.user.id };
-    } else if (isExecutiveRole(req.user.role)) {
-      const counterpart = isEdRole(req.user.role) ? "Chairman" : "ED";
+    } else if (isExecutiveRole(req.user)) {
+      const counterpart = isEdRole(req.user) ? "Chairman" : "ED";
       where[Op.or] = [
         { hr_verification_status: "verified", leave_requests_status: "verified_by_hr" },
         { leave_requests_status: "approved" },
@@ -137,13 +137,13 @@ export const getLeaveRequests = asyncHandler(async (req, res) => {
         },
       ];
     }
-  } else if (!isExactHr(req.user.role) && !isAdminRole(req.user.role)) {
+  } else if (!isExactHr(req.user) && !isAdminRole(req.user)) {
     where.user_id = req.user.id;
   }
 
   if (req.query.status) where.leave_requests_status = req.query.status;
   if (req.query.leave_type) where.leave_type = req.query.leave_type;
-  if (req.query.user_id && (tab === "received" || canReviewWorkflow(req.user.role))) {
+  if (req.query.user_id && (tab === "received" || canReviewWorkflow(req.user))) {
     where.user_id = req.query.user_id;
   }
   if (req.query.date_from) {
@@ -175,7 +175,7 @@ export const getLeaveRequests = asyncHandler(async (req, res) => {
   });
 
   let items = rows.map((row) => row.toJSON());
-  if (req.query.include_balance === "1" && canReviewWorkflow(req.user.role)) {
+  if (req.query.include_balance === "1" && canReviewWorkflow(req.user)) {
     const balanceMap = await getLeaveBalancesMap(items.map((row) => row.user_id));
     items = items.map((row) => ({
       ...row,
@@ -197,7 +197,7 @@ export const getLeaveRequest = asyncHandler(async (req, res) => {
     balance,
     permissions: {
       can_edit: row.user_id === req.user.id && row.leave_requests_status === "reverted",
-      can_hr_act: isExactHr(req.user.role) && !isSpecialCase(row),
+      can_hr_act: isExactHr(req.user) && !isSpecialCase(row),
       can_approve: isDesignatedApprover(req.user, row) && allowApprove(row),
       can_reject: isDesignatedApprover(req.user, row) && allowApprove(row),
       is_special_case: isSpecialCase(row),
@@ -390,7 +390,7 @@ export const deleteLeaveRequest = asyncHandler(async (req, res) => {
   const row = await loadLeave(req.params.id);
   if (!row) return fail(res, "Leave request not found", 404);
   const isOwner = Number(row.user_id) === Number(req.user.id);
-  const isHrAdmin = isExactHr(req.user.role) || isAdminRole(req.user.role);
+  const isHrAdmin = isExactHr(req.user) || isAdminRole(req.user);
   if (!isOwner && !isHrAdmin) return fail(res, "You are not authorized to delete this request.", 403);
   if (isOwner && !isHrAdmin && !["pending", "draft"].includes(row.leave_requests_status)) {
     return fail(res, "Only pending requests can be deleted", 403);
@@ -404,7 +404,7 @@ export const deleteLeaveRequest = asyncHandler(async (req, res) => {
 export const verifyLeaveByHr = asyncHandler(async (req, res) => {
   const row = await loadLeave(req.params.id);
   if (!row) return fail(res, "Leave request not found", 404);
-  if (!isExactHr(req.user.role) || isSpecialCase(row)) return fail(res, "Access denied", 403);
+  if (!isExactHr(req.user) || isSpecialCase(row)) return fail(res, "Access denied", 403);
   if (row.leave_requests_status !== "pending") return fail(res, "Only pending requests can be verified");
   if (!hasSignature(req.user)) {
     return fail(res, "Please upload your signature in profile settings before verifying requests.");
@@ -460,7 +460,7 @@ export const verifyLeaveByHr = asyncHandler(async (req, res) => {
 export const revertLeaveByHr = asyncHandler(async (req, res) => {
   const row = await loadLeave(req.params.id);
   if (!row) return fail(res, "Leave request not found", 404);
-  if (!isExactHr(req.user.role) || isSpecialCase(row)) return fail(res, "Access denied", 403);
+  if (!isExactHr(req.user) || isSpecialCase(row)) return fail(res, "Access denied", 403);
   if (!["pending", "verified_by_hr", "approved"].includes(row.leave_requests_status)) {
     return fail(res, "This request cannot be reverted");
   }

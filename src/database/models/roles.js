@@ -4,7 +4,16 @@ const { Model } = require("sequelize");
 module.exports = (sequelize, DataTypes) => {
   class Roles extends Model {
     static associate(models) {
-      // associations defined from PHP schema foreign-key columns
+      Roles.belongsToMany(models.Privileges, {
+        through: models.RolePrivileges,
+        foreignKey: "role_id",
+        otherKey: "privilege_id",
+        as: "privileges",
+      });
+      Roles.hasMany(models.RolePrivileges, {
+        foreignKey: "role_id",
+        as: "role_privilege_rows",
+      });
     }
   }
 

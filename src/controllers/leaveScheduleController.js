@@ -17,7 +17,7 @@ function canManageSchedule(role) {
 }
 
 function canAccess(user, row) {
-  if (canManageSchedule(user.role) || isExecutiveRole(user.role)) return true;
+  if (canManageSchedule(user) || isExecutiveRole(user)) return true;
   return Number(row.user_id) === Number(user.id);
 }
 
@@ -41,9 +41,9 @@ async function loadRow(id) {
 export const getLeaveSchedules = asyncHandler(async (req, res) => {
   const { page, limit, offset } = getPagination(req);
   const where = {};
-  if (!canManageSchedule(req.user.role)) where.user_id = req.user.id;
+  if (!canManageSchedule(req.user)) where.user_id = req.user.id;
   if (req.query.status) where.status = req.query.status;
-  if (req.query.user_id && canManageSchedule(req.user.role)) where.user_id = req.query.user_id;
+  if (req.query.user_id && canManageSchedule(req.user)) where.user_id = req.query.user_id;
   if (req.query.hr_read_status) where.hr_read_status = req.query.hr_read_status;
   if (req.query.ed_read_status) where.ed_read_status = req.query.ed_read_status;
   if (req.query.from_date) where.from_date = { [Op.gte]: req.query.from_date };
@@ -72,11 +72,11 @@ export const getLeaveSchedule = asyncHandler(async (req, res) => {
         row.status === "pending" &&
         row.hr_read_status === "unread" &&
         row.ed_read_status === "unread",
-      can_approve: canManageSchedule(req.user.role) && row.status === "pending",
-      can_reject: canManageSchedule(req.user.role) && row.status === "pending",
-      can_mark_hr_read: (isExactHr(req.user.role) || isAdminRole(req.user.role)) && row.hr_read_status !== "read",
-      can_mark_ed_read: (isEdRole(req.user.role) || isAdminRole(req.user.role)) && row.ed_read_status !== "read",
-      can_delete: canManageSchedule(req.user.role) || Number(row.user_id) === Number(req.user.id),
+      can_approve: canManageSchedule(req.user) && row.status === "pending",
+      can_reject: canManageSchedule(req.user) && row.status === "pending",
+      can_mark_hr_read: (isExactHr(req.user) || isAdminRole(req.user)) && row.hr_read_status !== "read",
+      can_mark_ed_read: (isEdRole(req.user) || isAdminRole(req.user)) && row.ed_read_status !== "read",
+      can_delete: canManageSchedule(req.user) || Number(row.user_id) === Number(req.user.id),
     },
   });
 });
@@ -137,7 +137,7 @@ export const updateLeaveSchedule = asyncHandler(async (req, res) => {
 export const updateLeaveScheduleStatus = asyncHandler(async (req, res) => {
   const row = await db.LeaveSchedule.findByPk(req.params.id);
   if (!row) return fail(res, "Leave schedule not found", 404);
-  if (!canManageSchedule(req.user.role)) return fail(res, "You don't have permission to change leave schedule status.", 403);
+  if (!canManageSchedule(req.user)) return fail(res, "You don't have permission to change leave schedule status.", 403);
   const status = req.body.status === "rejected" || req.body.action === "reject" ? "rejected" : "approved";
   await row.update({
     status,
@@ -166,11 +166,11 @@ export const updateLeaveScheduleStatus = asyncHandler(async (req, res) => {
 export const markLeaveScheduleRead = asyncHandler(async (req, res) => {
   const row = await db.LeaveSchedule.findByPk(req.params.id);
   if (!row) return fail(res, "Leave schedule not found", 404);
-  const markType = req.body.mark_type || (isEdRole(req.user.role) ? "ed" : "hr");
-  if (markType === "hr" && !isExactHr(req.user.role) && !isAdminRole(req.user.role)) {
+  const markType = req.body.mark_type || (isEdRole(req.user) ? "ed" : "hr");
+  if (markType === "hr" && !isExactHr(req.user) && !isAdminRole(req.user)) {
     return fail(res, "You can only mark as read for your role.", 403);
   }
-  if (markType === "ed" && !isEdRole(req.user.role) && !isAdminRole(req.user.role)) {
+  if (markType === "ed" && !isEdRole(req.user) && !isAdminRole(req.user)) {
     return fail(res, "You can only mark as read for your role.", 403);
   }
   if (markType === "ed") {
@@ -227,7 +227,7 @@ export const addLeaveScheduleReply = asyncHandler(async (req, res) => {
 export const deleteLeaveSchedule = asyncHandler(async (req, res) => {
   const row = await db.LeaveSchedule.findByPk(req.params.id);
   if (!row) return fail(res, "Leave schedule not found", 404);
-  if (!canManageSchedule(req.user.role) && Number(row.user_id) !== Number(req.user.id)) {
+  if (!canManageSchedule(req.user) && Number(row.user_id) !== Number(req.user.id)) {
     return fail(res, "You don't have permission to delete this leave schedule.", 403);
   }
   await db.LeaveScheduleReplies.destroy({ where: { leave_schedule_id: row.id } });

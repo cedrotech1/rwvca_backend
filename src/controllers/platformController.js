@@ -38,7 +38,7 @@ export const getPlatform = asyncHandler(async (req, res) => {
 });
 
 export const createPlatform = asyncHandler(async (req, res) => {
-  if (!isAdminRole(req.user.role)) return fail(res, "Access denied", 403);
+  if (!isAdminRole(req.user)) return fail(res, "Access denied", 403);
   if (!req.body.name || !req.body.description) return fail(res, "name and description are required");
   let image = req.body.image || null;
   try {
@@ -70,7 +70,7 @@ export const createPlatform = asyncHandler(async (req, res) => {
 });
 
 export const updatePlatform = asyncHandler(async (req, res) => {
-  if (!isAdminRole(req.user.role)) return fail(res, "Access denied", 403);
+  if (!isAdminRole(req.user)) return fail(res, "Access denied", 403);
   const row = await db.Platforms.findByPk(req.params.id);
   if (!row) return fail(res, "Platform not found", 404);
   let image = req.body.image !== undefined ? req.body.image : row.image;
@@ -91,7 +91,7 @@ export const updatePlatform = asyncHandler(async (req, res) => {
 });
 
 export const addPlatformDetail = asyncHandler(async (req, res) => {
-  if (!isAdminRole(req.user.role)) return fail(res, "Access denied", 403);
+  if (!isAdminRole(req.user)) return fail(res, "Access denied", 403);
   const row = await db.Platforms.findByPk(req.params.id);
   if (!row) return fail(res, "Platform not found", 404);
   if (!req.body.title) return fail(res, "title is required");
@@ -105,7 +105,7 @@ export const addPlatformDetail = asyncHandler(async (req, res) => {
 });
 
 export const updatePlatformDetail = asyncHandler(async (req, res) => {
-  if (!isAdminRole(req.user.role)) return fail(res, "Access denied", 403);
+  if (!isAdminRole(req.user)) return fail(res, "Access denied", 403);
   const detail = await db.PlatformDetails.findOne({ where: { id: req.params.detailId, pid: req.params.id } });
   if (!detail) return fail(res, "Platform detail not found", 404);
   await detail.update({
@@ -117,7 +117,7 @@ export const updatePlatformDetail = asyncHandler(async (req, res) => {
 });
 
 export const deletePlatformDetail = asyncHandler(async (req, res) => {
-  if (!isAdminRole(req.user.role)) return fail(res, "Access denied", 403);
+  if (!isAdminRole(req.user)) return fail(res, "Access denied", 403);
   const detail = await db.PlatformDetails.findOne({ where: { id: req.params.detailId, pid: req.params.id } });
   if (!detail) return fail(res, "Platform detail not found", 404);
   await detail.destroy();
@@ -125,7 +125,7 @@ export const deletePlatformDetail = asyncHandler(async (req, res) => {
 });
 
 export const deletePlatform = asyncHandler(async (req, res) => {
-  if (!isAdminRole(req.user.role)) return fail(res, "Access denied", 403);
+  if (!isAdminRole(req.user)) return fail(res, "Access denied", 403);
   const row = await db.Platforms.findByPk(req.params.id);
   if (!row) return fail(res, "Platform not found", 404);
   await db.PlatformDetails.destroy({ where: { pid: row.id } });

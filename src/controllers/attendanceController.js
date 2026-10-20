@@ -49,7 +49,7 @@ export const getAttendanceSession = asyncHandler(async (req, res) => {
 });
 
 export const createAttendanceSession = asyncHandler(async (req, res) => {
-  if (!canManageUsers(req.user.role)) return fail(res, "Access denied", 403);
+  if (!canManageUsers(req.user)) return fail(res, "Access denied", 403);
   if (!req.body.title || !req.body.attendance_date) return fail(res, "title and attendance_date are required");
   const row = await db.Attendance.create({
     title: req.body.title,
@@ -100,7 +100,7 @@ export const createAttendanceSession = asyncHandler(async (req, res) => {
 });
 
 export const updateAttendanceSession = asyncHandler(async (req, res) => {
-  if (!canManageUsers(req.user.role)) return fail(res, "Access denied", 403);
+  if (!canManageUsers(req.user)) return fail(res, "Access denied", 403);
   const row = await db.Attendance.findByPk(req.params.id);
   if (!row) return fail(res, "Attendance session not found", 404);
   await row.update({
@@ -115,7 +115,7 @@ export const updateAttendanceSession = asyncHandler(async (req, res) => {
 });
 
 export const addAttendanceUsers = asyncHandler(async (req, res) => {
-  if (!canManageUsers(req.user.role)) return fail(res, "Access denied", 403);
+  if (!canManageUsers(req.user)) return fail(res, "Access denied", 403);
   const row = await db.Attendance.findByPk(req.params.id);
   if (!row) return fail(res, "Attendance session not found", 404);
   const userIds = Array.isArray(req.body.user_ids) ? req.body.user_ids : [];
@@ -135,8 +135,8 @@ export const signAttendance = asyncHandler(async (req, res) => {
   const record = await db.AttendanceUsers.findOne({
     where: { attendance_id: row.id, user_id: req.user.id },
   });
-  if (!record && !canManageUsers(req.user.role)) return fail(res, "You are not on this attendance list", 403);
-  const userId = req.body.user_id && canManageUsers(req.user.role) ? req.body.user_id : req.user.id;
+  if (!record && !canManageUsers(req.user)) return fail(res, "You are not on this attendance list", 403);
+  const userId = req.body.user_id && canManageUsers(req.user) ? req.body.user_id : req.user.id;
   if (record) {
     await record.update({ signed: 1, responded_at: new Date() });
   } else {
@@ -151,7 +151,7 @@ export const signAttendance = asyncHandler(async (req, res) => {
 });
 
 export const deleteAttendanceSession = asyncHandler(async (req, res) => {
-  if (!canManageUsers(req.user.role)) return fail(res, "Access denied", 403);
+  if (!canManageUsers(req.user)) return fail(res, "Access denied", 403);
   const row = await db.Attendance.findByPk(req.params.id);
   if (!row) return fail(res, "Attendance session not found", 404);
   await db.AttendanceUsers.destroy({ where: { attendance_id: row.id } });

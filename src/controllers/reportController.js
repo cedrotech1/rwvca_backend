@@ -48,7 +48,7 @@ function buildCommentTree(comments) {
 
 async function canAccessReport(user, report) {
   if (!report) return false;
-  if (isExecutiveRole(user.role) || isAdminRole(user.role)) return true;
+  if (isExecutiveRole(user) || isAdminRole(user)) return true;
   if (Number(report.created_by) === Number(user.id)) return true;
   const recipient = await db.ReportRecipient.findOne({
     where: { report_id: report.id, recipient_type: "user", recipient_id: user.id },
@@ -356,7 +356,7 @@ export const createReport = asyncHandler(async (req, res) => {
 export const updateReport = asyncHandler(async (req, res) => {
   const report = await Reports.findByPk(req.params.id);
   if (!report) return fail(res, "Report not found", 404);
-  if (Number(report.created_by) !== Number(req.user.id) && !isAdminRole(req.user.role)) {
+  if (Number(report.created_by) !== Number(req.user.id) && !isAdminRole(req.user)) {
     return fail(res, "You do not have permission to update this report", 403);
   }
   const body = { ...req.body };
@@ -420,7 +420,7 @@ export const addReportComment = asyncHandler(async (req, res) => {
 export const addReportAttachment = asyncHandler(async (req, res) => {
   const report = await Reports.findByPk(req.params.id);
   if (!report) return fail(res, "Report not found", 404);
-  if (Number(report.created_by) !== Number(req.user.id) && !isAdminRole(req.user.role)) {
+  if (Number(report.created_by) !== Number(req.user.id) && !isAdminRole(req.user)) {
     return fail(res, "Access denied", 403);
   }
   let file_name = req.body.file_name;

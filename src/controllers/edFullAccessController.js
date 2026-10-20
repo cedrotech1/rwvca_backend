@@ -44,7 +44,7 @@ export const listModuleComments = asyncHandler(async (req, res) => {
   });
 
   const label = await getModuleRecordLabel(module, recordId);
-  const recipients = canUseEdComments(req.user.role)
+  const recipients = canUseEdComments(req.user)
     ? await buildNotifyCandidates(module, recordId, req.user.id)
     : [];
 
@@ -61,12 +61,12 @@ export const listModuleComments = asyncHandler(async (req, res) => {
     label,
     default_title: `Note on ${label}`,
     recipients,
-    staff_mode: !canUseEdComments(req.user.role),
+    staff_mode: !canUseEdComments(req.user),
   });
 });
 
 export const getNotifyRecipients = asyncHandler(async (req, res) => {
-  if (!canUseEdComments(req.user.role)) return fail(res, "Recipients list is for ED/HR only", 403);
+  if (!canUseEdComments(req.user)) return fail(res, "Recipients list is for ED/HR only", 403);
   const module = String(req.query.module || "").trim();
   const recordId = Number(req.query.record_id || 0);
   const parentId = req.query.parent_id ? Number(req.query.parent_id) : null;
@@ -88,7 +88,7 @@ export const getNotifyRecipients = asyncHandler(async (req, res) => {
 });
 
 export const searchEdNotifyUsers = asyncHandler(async (req, res) => {
-  if (!canUseEdComments(req.user.role)) return fail(res, "Not authorized", 403);
+  if (!canUseEdComments(req.user)) return fail(res, "Not authorized", 403);
   const users = await searchNotifyUsers(req.query.q, req.user.id);
   return ok(res, users);
 });
@@ -102,7 +102,7 @@ export const addModuleComment = asyncHandler(async (req, res) => {
   const notifyIds = Array.isArray(req.body.notify_ids)
     ? [...new Set(req.body.notify_ids.map((id) => Number(id)).filter(Boolean))]
     : [];
-  const isStaff = !canUseEdComments(req.user.role);
+  const isStaff = !canUseEdComments(req.user);
 
   if (!module || !recordId || !message) return fail(res, "module, record_id, and message are required");
 
@@ -154,7 +154,7 @@ export const addModuleComment = asyncHandler(async (req, res) => {
 });
 
 export const markEdThreadSeen = asyncHandler(async (req, res) => {
-  if (!isExecutiveRole(req.user.role)) return fail(res, "ED only", 403);
+  if (!isExecutiveRole(req.user)) return fail(res, "ED only", 403);
   const module = String(req.body.module || "").trim();
   const recordId = Number(req.body.record_id || 0);
   const commentId = Number(req.body.comment_id || 0);

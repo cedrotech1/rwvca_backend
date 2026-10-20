@@ -39,7 +39,7 @@ export const getProgram = asyncHandler(async (req, res) => {
 });
 
 export const createProgram = asyncHandler(async (req, res) => {
-  if (!isAdminRole(req.user.role)) return fail(res, "Access denied", 403);
+  if (!isAdminRole(req.user)) return fail(res, "Access denied", 403);
   if (!req.body.title || !req.body.description || !req.body.application_deadline || !req.body.requirements) {
     return fail(res, "title, description, application_deadline, and requirements are required");
   }
@@ -68,7 +68,7 @@ export const createProgram = asyncHandler(async (req, res) => {
 });
 
 export const updateProgram = asyncHandler(async (req, res) => {
-  if (!isAdminRole(req.user.role)) return fail(res, "Access denied", 403);
+  if (!isAdminRole(req.user)) return fail(res, "Access denied", 403);
   const row = await db.Programs.findByPk(req.params.id);
   if (!row) return fail(res, "Program not found", 404);
   await row.update({
@@ -93,7 +93,7 @@ export const updateProgram = asyncHandler(async (req, res) => {
 });
 
 export const addProgramImage = asyncHandler(async (req, res) => {
-  if (!isAdminRole(req.user.role)) return fail(res, "Access denied", 403);
+  if (!isAdminRole(req.user)) return fail(res, "Access denied", 403);
   const row = await db.Programs.findByPk(req.params.id);
   if (!row) return fail(res, "Program not found", 404);
   if (!req.body.url) {
@@ -110,7 +110,7 @@ export const addProgramImage = asyncHandler(async (req, res) => {
 });
 
 export const deleteProgramImage = asyncHandler(async (req, res) => {
-  if (!isAdminRole(req.user.role)) return fail(res, "Access denied", 403);
+  if (!isAdminRole(req.user)) return fail(res, "Access denied", 403);
   const image = await db.ProgramImages.findOne({ where: { id: req.params.imageId, pid: req.params.id } });
   if (!image) return fail(res, "Program image not found", 404);
   await image.destroy();
@@ -118,7 +118,7 @@ export const deleteProgramImage = asyncHandler(async (req, res) => {
 });
 
 export const deleteProgram = asyncHandler(async (req, res) => {
-  if (!isAdminRole(req.user.role)) return fail(res, "Access denied", 403);
+  if (!isAdminRole(req.user)) return fail(res, "Access denied", 403);
   const row = await db.Programs.findByPk(req.params.id);
   if (!row) return fail(res, "Program not found", 404);
   await db.ProgramImages.destroy({ where: { pid: row.id } });

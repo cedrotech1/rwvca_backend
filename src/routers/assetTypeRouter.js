@@ -27,7 +27,7 @@ router.get("/", protect, asyncHandler(async (req, res) => {
 }));
 
 router.post("/", protect, asyncHandler(async (req, res) => {
-  if (!canManageAssets(req.user.role)) return fail(res, "Access denied", 403);
+  if (!canManageAssets(req.user)) return fail(res, "Access denied", 403);
   const name = String(req.body.name || "").trim();
   if (!name) return fail(res, "name is required");
   const existing = await db.AssetTypes.findOne({ where: { name } });

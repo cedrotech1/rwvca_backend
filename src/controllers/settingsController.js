@@ -25,7 +25,7 @@ export const getSystemSettings = asyncHandler(async (req, res) => {
 });
 
 export const updateSystemSettings = asyncHandler(async (req, res) => {
-  if (!isAdminRole(req.user.role)) return fail(res, "Access denied", 403);
+  if (!isAdminRole(req.user)) return fail(res, "Access denied", 403);
   const row = await getRawSettings();
   if (!row) return fail(res, "Settings not found", 404);
 
@@ -55,7 +55,7 @@ export const updateSystemSettings = asyncHandler(async (req, res) => {
 });
 
 export const sendTestEmail = asyncHandler(async (req, res) => {
-  if (!isAdminRole(req.user.role)) return fail(res, "Access denied", 403);
+  if (!isAdminRole(req.user)) return fail(res, "Access denied", 403);
   const to = String(req.body.email || req.user.email || "").trim();
   if (!to) return fail(res, "A destination email is required");
   const mailer = new Email({ email: to, names: req.user.names || "Admin" });
@@ -83,7 +83,7 @@ export const sendTestEmail = asyncHandler(async (req, res) => {
 });
 
 export const exportDatabase = asyncHandler(async (req, res) => {
-  if (!isAdminRole(req.user.role)) return fail(res, "Access denied", 403);
+  if (!isAdminRole(req.user)) return fail(res, "Access denied", 403);
   const stamp = new Date().toISOString().slice(0, 10);
   const filename = `rwvca-database-${stamp}.sql`;
   try {

@@ -34,7 +34,7 @@ const DETAIL_INCLUDE = [
 ];
 
 function denyIfCannotManage(req, res) {
-  if (!canManageMembers(req.user.role)) {
+  if (!canManageMembers(req.user)) {
     fail(res, "Access denied", 403);
     return true;
   }

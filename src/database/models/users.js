@@ -65,6 +65,7 @@ module.exports = (sequelize, DataTypes) => {
       Users.hasMany(models.TodoComments, { foreignKey: "user_id", as: "todo_comments_user_id" });
       Users.hasMany(models.TodoShares, { foreignKey: "shared_by", as: "todo_shares_shared_by" });
       Users.hasMany(models.UserAllowedDays, { foreignKey: "user_id", as: "user_allowed_days_user_id" });
+      Users.hasMany(models.UserActingRoles, { foreignKey: "user_id", as: "acting_role_rows" });
       Users.hasMany(models.UserTasks, { foreignKey: "user_id", as: "user_tasks_user_id" });
       Users.hasMany(models.UserTasks, { foreignKey: "shared_by", as: "user_tasks_shared_by" });
       Users.belongsTo(models.Department, { foreignKey: "department_ID", as: "department" });

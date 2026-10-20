@@ -15,6 +15,8 @@ import {
   isExactHr,
   isExecutiveRole,
   canReviewWorkflow,
+  getEffectiveRoles,
+  userHasAnyRole,
 } from "../utils/roleHelpers.js";
 import { buildRequisitionAnalytics } from "../services/requisitionAnalyticsService.js";
 
@@ -44,16 +46,16 @@ const detailInclude = [
   },
 ];
 
-function financeReady(row, role) {
+function financeReady(row, roleOrUser) {
   const ready = ["approved", "authorized"].includes(String(row.status || "").toLowerCase());
-  if (String(role || "").trim().toLowerCase() === "assistant to ed") {
+  if (getEffectiveRoles(roleOrUser).includes("assistant to ed")) {
     return ready && Number(row.total_amount_requested || 0) < 100000;
   }
   return ready;
 }
 
 function canAccess(user, row) {
-  if (isAdminRole(user.role) || isExecutiveRole(user.role) || isExactHr(user.role)) return true;
+  if (isAdminRole(user) || isExecutiveRole(user) || isExactHr(user)) return true;
   const id = Number(user.id);
   const own = [
     row.prepared_by,
@@ -64,14 +66,13 @@ function canAccess(user, row) {
     row.approved_by,
   ].some((value) => Number(value) === id);
   if (own) return true;
-  if (isAccountantRole(user.role)) return financeReady(row, user.role);
+  if (isAccountantRole(user)) return financeReady(row, user);
   return false;
 }
 
 /** Account code / budget source are filled by accountants only. */
-function canEditAccountFields(role) {
-  const value = String(role || "").trim().toLowerCase();
-  return value === "accountant" || value === "assistant to the accountant";
+function canEditAccountFields(roleOrUser) {
+  return userHasAnyRole(roleOrUser, ["accountant", "assistant to the accountant"]);
 }
 
 function amountInWordsFromTotal(amount) {
@@ -125,10 +126,13 @@ async function loadRequisition(id) {
 }
 
 export const getRequisitionAnalytics = asyncHandler(async (req, res) => {
-  if (String(req.user.role || "").trim().toLowerCase() === "hr") {
-    return fail(res, "Access denied", 403);
+  {
+    const roles = getEffectiveRoles(req.user);
+    if (roles.length === 1 && roles[0] === "hr") {
+      return fail(res, "Access denied", 403);
+    }
   }
-  const canOrg = canReviewWorkflow(req.user.role) || isAccountantRole(req.user.role);
+  const canOrg = canReviewWorkflow(req.user) || isAccountantRole(req.user);
   if (!canOrg && String(req.query.scope) === "org") return fail(res, "Access denied", 403);
   const query = { ...req.query };
   if (!canOrg) query.user_id = req.user.id;
@@ -144,18 +148,18 @@ export const getRequisitions = asyncHandler(async (req, res) => {
   if (tab === "received") {
     where.sended_to = req.user.id;
   } else if (String(tab).startsWith("finance")) {
-    if (!isAccountantRole(req.user.role) && !isAdminRole(req.user.role) && !isExecutiveRole(req.user.role)) {
+    if (!isAccountantRole(req.user) && !isAdminRole(req.user) && !isExecutiveRole(req.user)) {
       return fail(res, "Access denied", 403);
     }
     where.status = { [Op.in]: ["approved", "authorized"] };
-    if (String(req.user.role || "").trim().toLowerCase() === "assistant to ed") {
+    if (getEffectiveRoles(req.user).includes("assistant to ed")) {
       where.total_amount_requested = { [Op.lt]: 100000 };
     }
     if (tab === "finance_pending") where.finance_status = { [Op.like]: "pending" };
     if (tab === "finance_paid") where.finance_status = { [Op.like]: "paid" };
     if (tab === "finance_rejected") where.finance_status = { [Op.like]: "%reject%" };
   } else if (tab === "all") {
-    if (!(isAdminRole(req.user.role) || isExactHr(req.user.role) || isExecutiveRole(req.user.role))) {
+    if (!(isAdminRole(req.user) || isExactHr(req.user) || isExecutiveRole(req.user))) {
       return fail(res, "Access denied", 403);
     }
     // organization-wide list for HR / accountant / ED / admin / chairman
@@ -207,14 +211,14 @@ export const getRequisition = asyncHandler(async (req, res) => {
     permissions: {
       can_edit: canAccess(req.user, row),
       can_delete: canAccess(req.user, row),
-      can_edit_account_fields: canEditAccountFields(req.user.role),
+      can_edit_account_fields: canEditAccountFields(req.user),
       can_submit: canAccess(req.user, row) && ["draft", "reverted"].includes(row.status),
-      can_verify: Number(row.sended_to) === Number(req.user.id) || isAdminRole(req.user.role) || isExactHr(req.user.role),
-      can_approve: isEdRole(req.user.role) || isExecutiveRole(req.user.role) || isAdminRole(req.user.role),
-      can_reject: Number(row.sended_to) === Number(req.user.id) || isEdRole(req.user.role) || isAdminRole(req.user.role) || isExactHr(req.user.role),
-      can_revert: Number(row.sended_to) === Number(req.user.id) || isEdRole(req.user.role) || isAdminRole(req.user.role) || isExactHr(req.user.role),
-      can_authorize: isEdRole(req.user.role) && !row.authorized_by,
-      can_finance: isAccountantRole(req.user.role) && financeReady(row, req.user.role),
+      can_verify: Number(row.sended_to) === Number(req.user.id) || isAdminRole(req.user) || isExactHr(req.user),
+      can_approve: isEdRole(req.user) || isExecutiveRole(req.user) || isAdminRole(req.user),
+      can_reject: Number(row.sended_to) === Number(req.user.id) || isEdRole(req.user) || isAdminRole(req.user) || isExactHr(req.user),
+      can_revert: Number(row.sended_to) === Number(req.user.id) || isEdRole(req.user) || isAdminRole(req.user) || isExactHr(req.user),
+      can_authorize: isEdRole(req.user) && !row.authorized_by,
+      can_finance: isAccountantRole(req.user) && financeReady(row, req.user),
     },
   });
 });
@@ -232,7 +236,7 @@ export const createRequisition = asyncHandler(async (req, res) => {
   if (action === "pending" && !sended_to) return fail(res, "sended_to is required when submitting");
 
   const total = sumItems(items);
-  const allowAccountFields = canEditAccountFields(req.user.role);
+  const allowAccountFields = canEditAccountFields(req.user);
   const row = await db.Requisitions.create({
     date: body.date,
     department_id: body.department_id,
@@ -295,7 +299,7 @@ export const updateRequisition = asyncHandler(async (req, res) => {
     viewer_id: body.viewer_id !== undefined ? body.viewer_id : row.viewer_id,
     status: nextStatus,
   };
-  if (canEditAccountFields(req.user.role)) {
+  if (canEditAccountFields(req.user)) {
     if (body.budget_source !== undefined) payload.budget_source = body.budget_source || null;
     if (body.account_code !== undefined) payload.account_code = body.account_code || null;
   }
@@ -405,7 +409,7 @@ export const updateRequisitionStatus = asyncHandler(async (req, res) => {
 export const authorizeRequisition = asyncHandler(async (req, res) => {
   const row = await db.Requisitions.findByPk(req.params.id);
   if (!row) return fail(res, "Requisition not found", 404);
-  if (!isEdRole(req.user.role)) return fail(res, "Only the Executive Director can authorize", 403);
+  if (!isEdRole(req.user)) return fail(res, "Only the Executive Director can authorize", 403);
   if (row.authorized_by) return fail(res, "This requisition is already authorized");
 
   await row.update({
@@ -438,7 +442,7 @@ export const authorizeRequisition = asyncHandler(async (req, res) => {
 export const updateViewerStatus = asyncHandler(async (req, res) => {
   const row = await db.Requisitions.findByPk(req.params.id);
   if (!row) return fail(res, "Requisition not found", 404);
-  if (Number(row.viewer_id) !== Number(req.user.id) && !isAdminRole(req.user.role)) {
+  if (Number(row.viewer_id) !== Number(req.user.id) && !isAdminRole(req.user)) {
     return fail(res, "Access denied", 403);
   }
   await row.update({
@@ -452,10 +456,10 @@ export const updateViewerStatus = asyncHandler(async (req, res) => {
 export const updateFinanceStatus = asyncHandler(async (req, res) => {
   const row = await db.Requisitions.findByPk(req.params.id);
   if (!row) return fail(res, "Requisition not found", 404);
-  if (!isAccountantRole(req.user.role) && !isAdminRole(req.user.role) && !isExecutiveRole(req.user.role)) {
+  if (!isAccountantRole(req.user) && !isAdminRole(req.user) && !isExecutiveRole(req.user)) {
     return fail(res, "Access denied", 403);
   }
-  if (isAccountantRole(req.user.role) && !financeReady(row, req.user.role)) {
+  if (isAccountantRole(req.user) && !financeReady(row, req.user)) {
     return fail(res, "This requisition is not ready for finance", 403);
   }
   await row.update({ finance_status: req.body.finance_status || row.finance_status });
