@@ -39,13 +39,20 @@ export function validateEnv() {
     errors.push('UAT_DATABASE_* configuration is incomplete for NODE_ENV=uat');
   }
 
-  // Development uses DEV_DATABASE_*. A remote PRO_DATABASE_HOST may stay in the file for production.
+  // Development may use a remote Postgres host when DEV_DATABASE_DIALECT is postgres.
+  // Local-only enforcement remains for MySQL / unspecified dialects.
   if (!isProd) {
     const activeHost = process.env.NODE_ENV === 'uat' ? uatHost : devHost;
-    if (activeHost && !isLocalDbHost(activeHost)) {
+    const dialect = String(
+      process.env.NODE_ENV === 'uat'
+        ? (process.env.UAT_DATABASE_DIALECT || process.env.DEV_DATABASE_DIALECT || '')
+        : (process.env.DEV_DATABASE_DIALECT || '')
+    ).trim().toLowerCase();
+    const allowRemotePostgres = dialect === 'postgres' || dialect === 'postgresql';
+    if (activeHost && !isLocalDbHost(activeHost) && !allowRemotePostgres) {
       errors.push(`The ${process.env.NODE_ENV === 'uat' ? 'UAT' : 'DEV'}_DATABASE_HOST must be local only (got: ${activeHost})`);
     }
-    if (activeHost && CLOUD_DB_PATTERN.test(activeHost)) {
+    if (activeHost && CLOUD_DB_PATTERN.test(activeHost) && !allowRemotePostgres) {
       errors.push(`Remote cloud database host is not allowed outside production: ${activeHost}`);
     }
   }

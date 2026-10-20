@@ -133,8 +133,11 @@ export const getRequisitions = asyncHandler(async (req, res) => {
     if (tab === "finance_pending") where.finance_status = { [Op.like]: "pending" };
     if (tab === "finance_paid") where.finance_status = { [Op.like]: "paid" };
     if (tab === "finance_rejected") where.finance_status = { [Op.like]: "%reject%" };
-  } else if (tab === "all" && (isAdminRole(req.user.role) || isExactHr(req.user.role) || isExecutiveRole(req.user.role))) {
-    // organization-wide list for HR / ED / admin only
+  } else if (tab === "all") {
+    if (!(isAdminRole(req.user.role) || isExactHr(req.user.role) || isExecutiveRole(req.user.role))) {
+      return fail(res, "Access denied", 403);
+    }
+    // organization-wide list for HR / accountant / ED / admin / chairman
   } else {
     where[Op.or] = [{ prepared_by: req.user.id }, { submitted_by: req.user.id }];
   }

@@ -21,6 +21,10 @@ function resolveDialect(explicit, port) {
   return "postgres";
 }
 
+function isLocalHost(host) {
+  return ["localhost", "127.0.0.1", "::1"].includes(String(host || "").trim().toLowerCase());
+}
+
 function mysqlOptions(dialect) {
   if (dialect !== "mysql") return {};
   return {
@@ -36,44 +40,50 @@ function mysqlOptions(dialect) {
   };
 }
 
+function buildConfig({ username, password, database, host, port, dialectEnv }) {
+  const dialect = resolveDialect(dialectEnv, port);
+  const remotePostgres = dialect === "postgres" && host && !isLocalHost(host);
+  const mysql = mysqlOptions(dialect);
+  return {
+    username,
+    password,
+    database,
+    host,
+    port,
+    dialect,
+    ...mysql,
+    dialectOptions: {
+      ...(mysql.dialectOptions || {}),
+      ...(remotePostgres
+        ? { ssl: { require: true, rejectUnauthorized: false } }
+        : {}),
+    },
+  };
+}
+
 module.exports = {
-  development: {
+  development: buildConfig({
     username: DEV_DATABASE_USER,
     password: DEV_DATABASE_PASSWORD,
     database: DEV_DATABASE_NAME,
     host: DEV_DATABASE_HOST,
     port: DEV_DATABASE_PORT,
-    dialect: resolveDialect(process.env.DEV_DATABASE_DIALECT, DEV_DATABASE_PORT),
-    ...mysqlOptions(resolveDialect(process.env.DEV_DATABASE_DIALECT, DEV_DATABASE_PORT)),
-  },
-  uat: {
+    dialectEnv: process.env.DEV_DATABASE_DIALECT,
+  }),
+  uat: buildConfig({
     username: process.env.UAT_DATABASE_USER || DEV_DATABASE_USER,
     password: process.env.UAT_DATABASE_PASSWORD || DEV_DATABASE_PASSWORD,
     database: process.env.UAT_DATABASE_NAME || "rwvca_uat",
     host: process.env.UAT_DATABASE_HOST || DEV_DATABASE_HOST,
     port: process.env.UAT_DATABASE_PORT || DEV_DATABASE_PORT,
-    dialect: "postgres",
-  },
-  production: (() => {
-    const dialect = resolveDialect(process.env.PRO_DATABASE_DIALECT, PRO_DATABASE_PORT);
-    const remotePostgres = dialect === "postgres"
-      && PRO_DATABASE_HOST
-      && !["localhost", "127.0.0.1"].includes(PRO_DATABASE_HOST);
-    return {
-      username: PRO_DATABASE_USER,
-      password: PRO_DATABASE_PASSWORD,
-      database: PRO_DATABASE_NAME,
-      host: PRO_DATABASE_HOST,
-      port: PRO_DATABASE_PORT,
-      dialect,
-      ...mysqlOptions(dialect),
-      dialectOptions: {
-        ...(mysqlOptions(dialect).dialectOptions || {}),
-        ...(remotePostgres
-          ? { ssl: { require: true, rejectUnauthorized: true } }
-          : {}),
-      },
-    };
-  })(),
+    dialectEnv: process.env.UAT_DATABASE_DIALECT || "postgres",
+  }),
+  production: buildConfig({
+    username: PRO_DATABASE_USER,
+    password: PRO_DATABASE_PASSWORD,
+    database: PRO_DATABASE_NAME,
+    host: PRO_DATABASE_HOST,
+    port: PRO_DATABASE_PORT,
+    dialectEnv: process.env.PRO_DATABASE_DIALECT,
+  }),
 };
-
