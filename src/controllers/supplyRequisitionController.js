@@ -131,7 +131,7 @@ async function notifyLogistics(requisition, actor, title, message) {
         type: "supply_requisition",
         title,
         message,
-        link: `/supply-requisitions/${requisition.id}`,
+        link: `/requisitions/supply/${requisition.id}`,
         priority: "middle",
       })
     )
@@ -146,7 +146,7 @@ async function notifyUser(userId, title, message, requisitionId) {
     type: "supply_requisition",
     title,
     message,
-    link: `/supply-requisitions/${requisitionId}`,
+    link: `/requisitions/supply/${requisitionId}`,
     priority: "middle",
   });
 }
