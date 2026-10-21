@@ -81,6 +81,7 @@ export const login = asyncHandler(async (req, res) => {
 
   // New / incomplete accounts stay inactive but may log in to finish profile.
   const pending = isPendingProfileActivation(user);
+  await user.update({ last_login_at: new Date() });
   await createLog(
     user.id,
     "login",

@@ -71,6 +71,11 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
         defaultValue: null,
       },
+      has_vat: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 1,
+      },
       created_at: {
         type: DataTypes.DATE,
         allowNull: true,

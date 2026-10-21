@@ -173,6 +173,7 @@ export const createAsset = asyncHandler(async (req, res) => {
   }
   const user_id = location === "office" ? null : req.user.id;
   const status = location === "office" ? "available" : "issued";
+  const inUse = req.body.in_use === 1 || req.body.in_use === true || location === "user" ? 1 : 0;
   const row = await db.Assets.create({
     name: req.body.name,
     asset_type_id: req.body.asset_type_id,
@@ -183,6 +184,9 @@ export const createAsset = asyncHandler(async (req, res) => {
     user_id,
     status,
     condition_notes: req.body.condition_notes || null,
+    condition_status: req.body.condition_status || "good",
+    department_id: req.body.department_id || null,
+    in_use: inUse,
   });
   await addAssetLog(row.id, req.user.id, "issued", row.user_id, `Asset recorded by ${isLogistics ? "logistic" : "user"}`);
   await createLog(req.user.id, "create_asset", `Created asset #${row.id}`);
@@ -206,6 +210,11 @@ export const updateAsset = asyncHandler(async (req, res) => {
     serial_number: req.body.serial_number !== undefined ? req.body.serial_number : row.serial_number,
     label_number: req.body.label_number !== undefined ? req.body.label_number : row.label_number,
     condition_notes: req.body.condition_notes !== undefined ? req.body.condition_notes : row.condition_notes,
+    condition_status: req.body.condition_status !== undefined ? req.body.condition_status : row.condition_status,
+    department_id: req.body.department_id !== undefined ? (req.body.department_id || null) : row.department_id,
+    in_use: req.body.in_use !== undefined
+      ? (req.body.in_use === 1 || req.body.in_use === true || req.body.in_use === "1" ? 1 : 0)
+      : row.in_use,
     revert_status: isLogistics ? row.revert_status : "no",
   });
   const assetName = req.body.name || row.name;
@@ -235,6 +244,8 @@ export const issueAsset = asyncHandler(async (req, res) => {
     user_id: req.body.user_id,
     issued_date: req.body.issued_date || new Date(),
     returned_date: null,
+    in_use: 1,
+    condition_status: req.body.condition_status || row.condition_status || "in_use",
   });
   await addAssetLog(row.id, req.user.id, "issued", req.body.user_id, req.body.comment || "Asset issued");
   return ok(res, await loadAsset(row.id), "Asset issued");
@@ -250,6 +261,11 @@ export const returnAsset = asyncHandler(async (req, res) => {
     status: req.body.status === "damaged" ? "damaged" : "returned",
     returned_date: req.body.returned_date || new Date(),
     condition_notes: req.body.comment !== undefined ? req.body.comment : (req.body.condition_notes !== undefined ? req.body.condition_notes : row.condition_notes),
+    in_use: 0,
+    condition_status: req.body.condition_status
+      || (req.body.status === "damaged" ? "damaged" : row.condition_status || "good"),
+    location: "office",
+    user_id: null,
   });
   await addAssetLog(row.id, req.user.id, "returned", previousUser, `Returned by logistics: ${req.body.comment || ""}`.trim());
   if (previousUser) {

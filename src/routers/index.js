@@ -46,6 +46,8 @@ import memberProductRouter from "./memberProductRouter.js";
 import membershipSetupRouter from "./membershipSetupRouter.js";
 import chatAssistantRouter from "./chatAssistantRouter.js";
 import procurementRouter from "./procurementRouter.js";
+import supplyRequisitionRouter from "./supplyRequisitionRouter.js";
+import employeePlanRouter from "./employeePlanRouter.js";
 
 const router = express.Router();
 
@@ -98,5 +100,7 @@ router.use("/member-products", memberProductRouter);
 router.use("/membership-setup", membershipSetupRouter);
 router.use("/assistant", chatAssistantRouter);
 router.use("/procurements", procurementRouter);
+router.use("/supply-requisitions", supplyRequisitionRouter);
+router.use("/employee-plans", employeePlanRouter);
 
 export default router;

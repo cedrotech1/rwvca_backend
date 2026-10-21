@@ -1045,6 +1045,7 @@ export const createMembershipReport = asyncHandler(async (req, res) => {
         mst: toNumber(item.mst),
         vat_and_msf: toNumber(item.vat_and_msf),
         vat_and_mst: toNumber(item.vat_and_mst),
+        has_vat: item.has_vat === 0 || item.has_vat === false || item.has_vat === "0" ? 0 : 1,
       }))
     );
   }
@@ -1144,6 +1145,7 @@ export const updateMembershipReport = asyncHandler(async (req, res) => {
           mst: toNumber(item.mst),
           vat_and_msf: toNumber(item.vat_and_msf),
           vat_and_mst: toNumber(item.vat_and_mst),
+          has_vat: item.has_vat === 0 || item.has_vat === false || item.has_vat === "0" ? 0 : 1,
         }))
       );
     }

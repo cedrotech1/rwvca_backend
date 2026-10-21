@@ -30,6 +30,16 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: "Not Paid",
       },
+      amount_paid: {
+        type: DataTypes.DECIMAL(14, 2),
+        allowNull: false,
+        defaultValue: 0,
+      },
+      amount_due: {
+        type: DataTypes.DECIMAL(14, 2),
+        allowNull: false,
+        defaultValue: 0,
+      },
       notes: {
         type: DataTypes.TEXT,
         allowNull: true,

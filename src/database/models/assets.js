@@ -70,6 +70,21 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.TEXT,
         allowNull: true,
       },
+      condition_status: {
+        type: DataTypes.STRING(40),
+        allowNull: false,
+        defaultValue: "good",
+      },
+      department_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        defaultValue: null,
+      },
+      in_use: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+      },
       created_at: {
         type: DataTypes.DATE,
         allowNull: false,

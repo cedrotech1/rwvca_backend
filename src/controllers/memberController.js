@@ -80,28 +80,53 @@ function memberFields(body) {
   };
 }
 
-async function saveYearPayments(memberId, yearPayments = {}, membershipStatus) {
+function parseYearPaymentEntry(raw) {
+  if (raw == null || raw === "") return null;
+  if (typeof raw === "string") {
+    return { payment_status: raw, amount_paid: 0, amount_due: 0 };
+  }
+  if (typeof raw === "object") {
+    const status = raw.payment_status || raw.status || "";
+    if (!status) return null;
+    return {
+      payment_status: status,
+      amount_paid: Number(raw.amount_paid || 0) || 0,
+      amount_due: Number(raw.amount_due || 0) || 0,
+      notes: raw.notes || null,
+    };
+  }
+  return null;
+}
+
+async function saveYearPayments(memberId, yearPayments = {}, membershipStatus, umusanzuAmounts = {}) {
   const umusanzu = await db.MembershipYears.findOne({ where: { year_value: UMUSANZU_YEAR } });
   const entries = yearPayments && typeof yearPayments === "object" ? Object.entries(yearPayments) : [];
-  for (const [yearId, status] of entries) {
+  for (const [yearId, raw] of entries) {
+    if (String(yearId).startsWith("__")) continue;
     const id = Number(yearId);
     if (umusanzu && id === Number(umusanzu.id)) continue;
-    if (!status) {
+    const parsed = parseYearPaymentEntry(raw);
+    if (!parsed) {
       await db.MemberYearPayments.destroy({ where: { member_id: memberId, year_id: id } });
       continue;
     }
     const [row] = await db.MemberYearPayments.findOrCreate({
       where: { member_id: memberId, year_id: id },
-      defaults: { payment_status: status },
+      defaults: parsed,
     });
-    await row.update({ payment_status: status });
+    await row.update(parsed);
   }
   if (umusanzu && membershipStatus) {
+    const umusanzuPayload = {
+      payment_status: membershipStatus,
+      amount_paid: Number(umusanzuAmounts.amount_paid || 0) || 0,
+      amount_due: Number(umusanzuAmounts.amount_due || 0) || 0,
+    };
     const [row] = await db.MemberYearPayments.findOrCreate({
       where: { member_id: memberId, year_id: umusanzu.id },
-      defaults: { payment_status: membershipStatus },
+      defaults: umusanzuPayload,
     });
-    await row.update({ payment_status: membershipStatus });
+    await row.update(umusanzuPayload);
   }
 }
 
@@ -237,7 +262,10 @@ export const createMember = asyncHandler(async (req, res) => {
   if (!req.body.membership_category) return fail(res, "membership_category is required");
   if (!req.body.membership_category_platform_id) return fail(res, "membership_category_platform_id is required");
   const member = await db.Members.create(memberFields(req.body));
-  await saveYearPayments(member.id, req.body.year_payments, member.membership_status);
+  await saveYearPayments(member.id, req.body.year_payments, member.membership_status, {
+    amount_paid: req.body.membership_amount_paid,
+    amount_due: req.body.membership_amount_due,
+  });
   await saveCategoryDetails(member.id, req.body);
   await createLog(req.user.id, "create_member", `Created member #${member.id}`);
   return created(res, await loadMember(member.id), "Member added successfully");
@@ -249,7 +277,15 @@ export const updateMember = asyncHandler(async (req, res) => {
   if (!member) return fail(res, "Member not found", 404);
   if (!req.body.membership_category) return fail(res, "membership_category is required");
   await member.update(memberFields(req.body));
-  await saveYearPayments(member.id, req.body.year_payments, req.body.membership_status || member.membership_status);
+  await saveYearPayments(
+    member.id,
+    req.body.year_payments,
+    req.body.membership_status || member.membership_status,
+    {
+      amount_paid: req.body.membership_amount_paid,
+      amount_due: req.body.membership_amount_due,
+    }
+  );
   await saveCategoryDetails(member.id, req.body);
   await createLog(req.user.id, "update_member", `Updated member #${member.id}`);
   return ok(res, await loadMember(member.id), "Member updated successfully");
@@ -350,14 +386,24 @@ export const getMemberStatistics = asyncHandler(async (req, res) => {
     }),
     db.Members.count({ where: { has_rwvca_role: 1 } }),
     db.MemberYearPayments.findAll({
-      attributes: ["payment_status", [sequelize.fn("count", sequelize.col("MemberYearPayments.id")), "count"]],
+      attributes: [
+        "payment_status",
+        [sequelize.fn("count", sequelize.col("MemberYearPayments.id")), "count"],
+        [sequelize.fn("coalesce", sequelize.fn("sum", sequelize.col("MemberYearPayments.amount_paid")), 0), "amount_paid"],
+        [sequelize.fn("coalesce", sequelize.fn("sum", sequelize.col("MemberYearPayments.amount_due")), 0), "amount_due"],
+      ],
       include: [{ model: db.MembershipYears, as: "year", attributes: ["year_value"] }],
       group: ["payment_status", "year.id", "year.year_value"],
       raw: true,
       nest: true,
     }).catch(() => []),
     db.MemberYearPayments.findAll({
-      attributes: ["payment_status", [sequelize.fn("count", sequelize.col("MemberYearPayments.id")), "count"]],
+      attributes: [
+        "payment_status",
+        [sequelize.fn("count", sequelize.col("MemberYearPayments.id")), "count"],
+        [sequelize.fn("coalesce", sequelize.fn("sum", sequelize.col("MemberYearPayments.amount_paid")), 0), "amount_paid"],
+        [sequelize.fn("coalesce", sequelize.fn("sum", sequelize.col("MemberYearPayments.amount_due")), 0), "amount_due"],
+      ],
       include: [{
         model: db.MembershipYears,
         as: "year",
@@ -425,20 +471,34 @@ export const getMemberStatistics = asyncHandler(async (req, res) => {
   (yearPaymentRows || []).forEach((row) => {
     const year = Number(row.year?.year_value || row["year.year_value"] || 0);
     if (!year) return;
-    if (!yearMap[year]) yearMap[year] = { year, Paid: 0, Partial: 0, "Not Paid": 0, total: 0 };
+    if (!yearMap[year]) {
+      yearMap[year] = {
+        year, Paid: 0, Partial: 0, "Not Paid": 0, total: 0, amount_paid: 0, amount_due: 0,
+      };
+    }
     const status = row.payment_status;
     const count = Number(row.count || 0);
     if (yearMap[year][status] !== undefined) yearMap[year][status] = count;
     yearMap[year].total += count;
+    yearMap[year].amount_paid += Number(row.amount_paid || 0);
+    yearMap[year].amount_due += Number(row.amount_due || 0);
   });
   const by_year_payments = Object.values(yearMap).sort((a, b) => b.year - a.year);
 
   const selected_year_payments = { Paid: 0, Partial: 0, "Not Paid": 0, total: 0 };
+  let total_amount_paid = 0;
+  let total_amount_due = 0;
+  let partial_amount_paid = 0;
   (selectedYearRows || []).forEach((row) => {
     const status = row.payment_status;
     const count = Number(row.count || 0);
+    const paidAmt = Number(row.amount_paid || 0);
+    const dueAmt = Number(row.amount_due || 0);
     if (selected_year_payments[status] !== undefined) selected_year_payments[status] = count;
     selected_year_payments.total += count;
+    total_amount_paid += paidAmt;
+    total_amount_due += dueAmt;
+    if (status === "Partial") partial_amount_paid += paidAmt;
   });
 
   const paidCount = Number((by_status || []).find((row) => row.membership_status === "Paid")?.count || 0);
@@ -473,6 +533,16 @@ export const getMemberStatistics = asyncHandler(async (req, res) => {
     by_registration: groupCount(by_registration),
     by_year_payments,
     selected_year_payments,
+    total_amount_paid,
+    total_amount_due,
+    amount_paid: total_amount_paid,
+    amount_due: total_amount_due,
+    partial_amount_paid,
+    amounts: {
+      amount_paid: total_amount_paid,
+      amount_due: total_amount_due,
+      amount_partial: partial_amount_paid,
+    },
     by_province: groupCount(by_province),
     by_district: districtRows,
     by_month: groupCount(by_month),
