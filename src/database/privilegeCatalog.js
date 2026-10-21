@@ -45,7 +45,7 @@ const PRIVILEGE_DEFINITIONS = [
   P("menu.account", "Account / Profile", "menu", null, 65),
   P("menu.attendance", "Attendance", "menu", null, 66),
   P("menu.employee_plans", "Employee Plans", "menu", null, 67),
-  P("menu.staff_monitoring", "Staff Monitoring (all staff)", "menu", "See organization-wide staff monitoring; everyone already has their own dashboard", 26),
+  P("menu.staff_monitoring", "Employee plan monitoring (all staff)", "menu", "See organization-wide employee plan monitoring; everyone already has My plans monitoring", 26),
   P("menu.logistic_dashboard", "Logistic Dashboard", "menu", null, 69),
   P("menu.inventory", "Inventory", "menu", null, 70),
   P("menu.procurement", "Procurement", "menu", null, 71),
@@ -97,7 +97,7 @@ const PRIVILEGE_DEFINITIONS = [
   P("analysis.requisition", "Requisition analysis", "capability", null, 191),
   P("analysis.members", "Members analysis", "capability", null, 192),
   P("plans.manage", "Manage employee plans", "capability", null, 193),
-  P("plans.monitor", "Monitor all staff plans", "capability", "View and manage plans across all staff on the monitoring dashboard", 194),
+  P("plans.monitor", "Employee plan monitoring (all staff)", "capability", "View and manage plans across all staff on Employee plan monitoring", 194),
 ];
 
 const CREATE_MENUS = [
