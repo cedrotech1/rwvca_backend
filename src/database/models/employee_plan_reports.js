@@ -18,6 +18,7 @@ module.exports = (sequelize, DataTypes) => {
       period_end: { type: DataTypes.DATEONLY, allowNull: false },
       content: { type: DataTypes.TEXT, allowNull: true },
       shared_department_ids: { type: DataTypes.TEXT, allowNull: true },
+      shared_user_ids: { type: DataTypes.TEXT, allowNull: true },
       created_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
       updated_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
     },

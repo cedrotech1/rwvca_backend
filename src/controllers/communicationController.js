@@ -169,9 +169,9 @@ export const getCommunication = asyncHandler(async (req, res) => {
 
 export const createCommunication = asyncHandler(async (req, res) => {
   const title = toPlainText(req.body?.title);
-  const description = toPlainText(req.body?.description);
+  const description = req.body?.description != null ? String(req.body.description).trim() : "";
   const users = req.body?.users;
-  if (!title || !description || !users) {
+  if (!title || !toPlainText(description) || !users) {
     return fail(res, "title, description, and users are required");
   }
   const priority = requireNotificationPriority(req.body);

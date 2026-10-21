@@ -163,7 +163,7 @@ export const createProcurement = asyncHandler(async (req, res) => {
     reference_no: toPlainText(req.body.reference_no) || null,
     title,
     category: toPlainText(req.body.category) || null,
-    description: toPlainText(req.body.description) || null,
+    description: req.body.description != null ? String(req.body.description) : null,
     supplier_name: toPlainText(req.body.supplier_name) || null,
     amount: parseAmount(req.body.amount),
     currency: toPlainText(req.body.currency) || "RWF",
@@ -171,7 +171,7 @@ export const createProcurement = asyncHandler(async (req, res) => {
     requested_date: req.body.requested_date || null,
     expected_date: req.body.expected_date || null,
     completed_date: req.body.completed_date || null,
-    notes: toPlainText(req.body.notes) || null,
+    notes: req.body.notes != null ? String(req.body.notes) : null,
     created_by: req.user.id,
     updated_by: req.user.id,
   });
@@ -216,7 +216,7 @@ export const updateProcurement = asyncHandler(async (req, res) => {
     reference_no: req.body.reference_no !== undefined ? toPlainText(req.body.reference_no) || null : row.reference_no,
     title: req.body.title !== undefined ? toPlainText(req.body.title) || row.title : row.title,
     category: req.body.category !== undefined ? toPlainText(req.body.category) || null : row.category,
-    description: req.body.description !== undefined ? toPlainText(req.body.description) || null : row.description,
+    description: req.body.description !== undefined ? (req.body.description != null ? String(req.body.description) : null) : row.description,
     supplier_name: req.body.supplier_name !== undefined ? toPlainText(req.body.supplier_name) || null : row.supplier_name,
     amount: req.body.amount !== undefined ? parseAmount(req.body.amount) : row.amount,
     currency: req.body.currency !== undefined ? toPlainText(req.body.currency) || "RWF" : row.currency,
@@ -224,7 +224,7 @@ export const updateProcurement = asyncHandler(async (req, res) => {
     requested_date: req.body.requested_date !== undefined ? req.body.requested_date || null : row.requested_date,
     expected_date: req.body.expected_date !== undefined ? req.body.expected_date || null : row.expected_date,
     completed_date: req.body.completed_date !== undefined ? req.body.completed_date || null : row.completed_date,
-    notes: req.body.notes !== undefined ? toPlainText(req.body.notes) || null : row.notes,
+    notes: req.body.notes !== undefined ? (req.body.notes != null ? String(req.body.notes) : null) : row.notes,
     updated_by: req.user.id,
   });
 

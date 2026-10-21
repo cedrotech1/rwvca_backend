@@ -135,37 +135,64 @@ async function loadPlan(id) {
   });
 }
 
-function parseSharedDepartmentIds(value) {
+function parseIdList(value) {
   if (value == null || value === "") return null;
   if (Array.isArray(value)) {
-    const ids = value.map(Number).filter((n) => Number.isFinite(n) && n > 0);
+    const ids = [...new Set(value.map(Number).filter((n) => Number.isFinite(n) && n > 0))];
     return ids.length ? JSON.stringify(ids) : null;
   }
   if (typeof value === "string") {
     try {
       const parsed = JSON.parse(value);
       if (Array.isArray(parsed)) {
-        const ids = parsed.map(Number).filter((n) => Number.isFinite(n) && n > 0);
+        const ids = [...new Set(parsed.map(Number).filter((n) => Number.isFinite(n) && n > 0))];
         return ids.length ? JSON.stringify(ids) : null;
       }
     } catch {
-      const ids = value
-        .split(",")
-        .map((v) => Number(String(v).trim()))
-        .filter((n) => Number.isFinite(n) && n > 0);
+      const ids = [
+        ...new Set(
+          value
+            .split(",")
+            .map((v) => Number(String(v).trim()))
+            .filter((n) => Number.isFinite(n) && n > 0)
+        ),
+      ];
       return ids.length ? JSON.stringify(ids) : null;
     }
   }
   return null;
 }
 
-function sharedDeptList(report) {
+const parseSharedDepartmentIds = parseIdList;
+const parseSharedUserIds = parseIdList;
+
+function parseStoredIdList(raw) {
   try {
-    const parsed = JSON.parse(report.shared_department_ids || "[]");
-    return Array.isArray(parsed) ? parsed.map(Number) : [];
+    const parsed = JSON.parse(raw || "[]");
+    return Array.isArray(parsed) ? parsed.map(Number).filter((n) => Number.isFinite(n) && n > 0) : [];
   } catch {
     return [];
   }
+}
+
+function sharedDeptList(report) {
+  return parseStoredIdList(report.shared_department_ids);
+}
+
+function sharedUserList(report) {
+  return parseStoredIdList(report.shared_user_ids);
+}
+
+function reportIsShared(report) {
+  return sharedUserList(report).length > 0 || sharedDeptList(report).length > 0;
+}
+
+function reportSharedWithUser(report, user) {
+  const userId = Number(user?.id);
+  if (userId && sharedUserList(report).includes(userId)) return true;
+  const deptId = Number(user?.department_ID);
+  if (deptId && sharedDeptList(report).includes(deptId)) return true;
+  return false;
 }
 
 export const listPlans = asyncHandler(async (req, res) => {
@@ -642,9 +669,12 @@ export const createReport = asyncHandler(async (req, res) => {
     return fail(res, "title, period_start, and period_end are required");
   }
 
+  const shared_user_ids = parseSharedUserIds(body.shared_user_ids ?? body.sharedUserIds);
+  // Legacy department share still accepted; new UI sends specific users.
   const shared_department_ids = parseSharedDepartmentIds(
     body.shared_department_ids ?? body.sharedDepartmentIds
   );
+  const userIds = shared_user_ids ? JSON.parse(shared_user_ids) : [];
   const deptIds = shared_department_ids ? JSON.parse(shared_department_ids) : [];
 
   const row = await db.EmployeePlanReports.create({
@@ -654,6 +684,7 @@ export const createReport = asyncHandler(async (req, res) => {
     period_start,
     period_end,
     content: body.content != null ? String(body.content) : null,
+    shared_user_ids,
     shared_department_ids,
   });
 
@@ -661,11 +692,15 @@ export const createReport = asyncHandler(async (req, res) => {
     planId: null,
     reportId: row.id,
     action: "report_created",
-    detail: `Created ${report_type} report "${title}" shared to ${deptIds.length} department(s)`,
+    detail: `Created ${report_type} report "${title}" shared to ${userIds.length} user(s)${
+      deptIds.length ? ` / ${deptIds.length} department(s)` : ""
+    }`,
     userId: req.user.id,
-    meta: { report_id: row.id, shared_department_ids: deptIds },
+    meta: { report_id: row.id, shared_user_ids: userIds, shared_department_ids: deptIds },
   });
   await createLog(req.user.id, "create_employee_plan_report", `Created plan report #${row.id}`);
+
+  const notifyUserIds = new Set(userIds.map(Number).filter((n) => n && n !== Number(req.user.id)));
 
   if (deptIds.length) {
     const deptUsers = await db.Users.findAll({
@@ -674,22 +709,34 @@ export const createReport = asyncHandler(async (req, res) => {
         active: 1,
         department_ID: { [Op.in]: deptIds },
       },
-      attributes: ["id", "names", "email", "department_ID"],
+      attributes: ["id"],
+    });
+    deptUsers.forEach((u) => {
+      if (Number(u.id) !== Number(req.user.id)) notifyUserIds.add(Number(u.id));
+    });
+  }
+
+  if (notifyUserIds.size) {
+    const recipients = await db.Users.findAll({
+      where: {
+        id: { [Op.in]: [...notifyUserIds] },
+        deleted: { [Op.ne]: "1" },
+        active: 1,
+      },
+      attributes: ["id"],
     });
     await Promise.all(
-      deptUsers
-        .filter((u) => Number(u.id) !== Number(req.user.id))
-        .map((u) =>
-          createNotification({
-            whatsapp: true,
-            receiverId: u.id,
-            type: "employee_plan",
-            title: `${report_type} plan report shared`,
-            message: `${req.user.names} shared "${title}" (${period_start} → ${period_end}) with your department.`,
-            link: `/employee-plans`,
-            priority: "middle",
-          })
-        )
+      recipients.map((u) =>
+        createNotification({
+          whatsapp: true,
+          receiverId: u.id,
+          type: "employee_plan",
+          title: `${report_type} plan report shared`,
+          message: `${req.user.names} shared "${title}" (${period_start} → ${period_end}) with you.`,
+          link: `/employee-plans`,
+          priority: "middle",
+        })
+      )
     );
   }
 
@@ -708,14 +755,11 @@ export const listReports = asyncHandler(async (req, res) => {
   const scope = String(req.query.scope || "mine").toLowerCase();
 
   if (scope === "department" || scope === "shared") {
-    const deptId = Number(req.query.department_id || req.user.department_ID);
-    if (!deptId) return fail(res, "department_id is required");
-
     const all = await db.EmployeePlanReports.findAll({
       include: [{ model: db.Users, as: "author", attributes: ["id", "names", "email", "role", "department_ID"] }],
       order: [["created_at", "DESC"]],
     });
-    const filtered = all.filter((r) => sharedDeptList(r).includes(deptId));
+    const filtered = all.filter((r) => reportSharedWithUser(r, req.user));
     const total = filtered.length;
     const items = filtered.slice(offset, offset + limit);
     return ok(res, { items, pagination: paginationMeta(total, page, limit) });
@@ -798,7 +842,7 @@ export const getStaffMonitoring = asyncHandler(async (req, res) => {
 
   const reportsThisMonth = await db.EmployeePlanReports.findAll({
     where: { created_at: { [Op.between]: [monthStart, monthEnd] } },
-    attributes: ["id", "user_id", "shared_department_ids", "created_at", "report_type", "title"],
+    attributes: ["id", "user_id", "shared_department_ids", "shared_user_ids", "created_at", "report_type", "title"],
   });
 
   const recentLogs = db.EmployeePlanLogs
@@ -850,7 +894,7 @@ export const getStaffMonitoring = asyncHandler(async (req, res) => {
     const userReports = reportsByUser.get(uid) || [];
     const completed = userPlans.filter((p) => p.status === "complete").length;
     const joint = userPlans.filter((p) => p.is_joint).length;
-    const sharedReports = userReports.filter((r) => sharedDeptList(r).length > 0);
+    const sharedReports = userReports.filter((r) => reportIsShared(r));
     const completionRate = userPlans.length
       ? Math.round((completed / userPlans.length) * 100)
       : 0;
@@ -963,7 +1007,7 @@ export const getStaffMonitoring = asyncHandler(async (req, res) => {
       plans: plans.length,
       completed: statusCounts.complete,
       reports_this_month: reportsThisMonth.length,
-      shared_reports_this_month: reportsThisMonth.filter((r) => sharedDeptList(r).length > 0).length,
+      shared_reports_this_month: reportsThisMonth.filter((r) => reportIsShared(r)).length,
       joint_rate_percent: jointRate,
     },
   });
