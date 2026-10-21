@@ -17,7 +17,10 @@ const REPORT_TYPES = ["DAILY", "WEEKLY", "MONTHLY", "QUARTERLY", "YEARLY"];
 function canMonitorPlans(user) {
   return (
     userHasPrivilege(user, "plans.monitor") ||
-    (Array.isArray(user?.privilege_codes) && user.privilege_codes.includes("plans.monitor")) ||
+    userHasPrivilege(user, "menu.staff_monitoring") ||
+    (Array.isArray(user?.privilege_codes) &&
+      (user.privilege_codes.includes("plans.monitor") ||
+        user.privilege_codes.includes("menu.staff_monitoring"))) ||
     isAdminRole(user) ||
     isExecutiveRole(user)
   );
@@ -786,7 +789,9 @@ export const listReports = asyncHandler(async (req, res) => {
 });
 
 export const getStaffMonitoring = asyncHandler(async (req, res) => {
-  if (!canMonitorPlans(req.user)) return fail(res, "Access denied", 403);
+  // Everyone may open monitoring; privilege unlocks organization-wide view.
+  const canSeeAll = canMonitorPlans(req.user);
+  const selfId = Number(req.user.id);
 
   const now = new Date();
   const periodStart = req.query.period_start
@@ -796,9 +801,9 @@ export const getStaffMonitoring = asyncHandler(async (req, res) => {
     ? String(req.query.period_end)
     : new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10);
 
-  const search = String(req.query.search || "").trim().toLowerCase();
+  const search = canSeeAll ? String(req.query.search || "").trim().toLowerCase() : "";
   const sort = String(req.query.sort || "completed").toLowerCase();
-  const departmentId = req.query.department_id ? Number(req.query.department_id) : null;
+  const departmentId = canSeeAll && req.query.department_id ? Number(req.query.department_id) : null;
 
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
@@ -809,7 +814,8 @@ export const getStaffMonitoring = asyncHandler(async (req, res) => {
     deleted: { [Op.ne]: "1" },
     active: 1,
   };
-  if (departmentId) staffWhere.department_ID = departmentId;
+  if (!canSeeAll) staffWhere.id = selfId;
+  else if (departmentId) staffWhere.department_ID = departmentId;
 
   const staff = await db.Users.findAll({
     where: staffWhere,
@@ -818,19 +824,24 @@ export const getStaffMonitoring = asyncHandler(async (req, res) => {
     order: [["names", "ASC"]],
   });
 
+  const staffIds = staff.map((u) => Number(u.id));
+  const planPeriodWhere = {
+    [Op.or]: [
+      { start_date: { [Op.between]: [periodStart, periodEnd] } },
+      { end_date: { [Op.between]: [periodStart, periodEnd] } },
+      {
+        [Op.and]: [
+          { start_date: { [Op.lte]: periodStart } },
+          { end_date: { [Op.gte]: periodEnd } },
+        ],
+      },
+    ],
+  };
+  if (!canSeeAll) planPeriodWhere.user_id = selfId;
+  else planPeriodWhere.user_id = staffIds.length ? { [Op.in]: staffIds } : -1;
+
   const plans = await db.EmployeePlans.findAll({
-    where: {
-      [Op.or]: [
-        { start_date: { [Op.between]: [periodStart, periodEnd] } },
-        { end_date: { [Op.between]: [periodStart, periodEnd] } },
-        {
-          [Op.and]: [
-            { start_date: { [Op.lte]: periodStart } },
-            { end_date: { [Op.gte]: periodEnd } },
-          ],
-        },
-      ],
-    },
+    where: planPeriodWhere,
     include: [
       {
         model: db.EmployeePlanCollaborators,
@@ -840,21 +851,42 @@ export const getStaffMonitoring = asyncHandler(async (req, res) => {
     ],
   });
 
+  const reportWhere = { created_at: { [Op.between]: [monthStart, monthEnd] } };
+  if (!canSeeAll) reportWhere.user_id = selfId;
+  else reportWhere.user_id = staffIds.length ? { [Op.in]: staffIds } : -1;
+
   const reportsThisMonth = await db.EmployeePlanReports.findAll({
-    where: { created_at: { [Op.between]: [monthStart, monthEnd] } },
+    where: reportWhere,
     attributes: ["id", "user_id", "shared_department_ids", "shared_user_ids", "created_at", "report_type", "title"],
   });
 
-  const recentLogs = db.EmployeePlanLogs
-    ? await db.EmployeePlanLogs.findAll({
-        include: [
-          { model: db.Users, as: "actor", attributes: ["id", "names", "role"] },
-          { model: db.EmployeePlans, as: "plan", attributes: ["id", "title"] },
+  let recentLogs = [];
+  if (db.EmployeePlanLogs) {
+    let logWhere = {};
+    if (!canSeeAll) {
+      const ownPlanIds = (
+        await db.EmployeePlans.findAll({
+          where: { user_id: selfId },
+          attributes: ["id"],
+        })
+      ).map((p) => Number(p.id));
+      logWhere = {
+        [Op.or]: [
+          { changed_by: selfId },
+          ...(ownPlanIds.length ? [{ plan_id: { [Op.in]: ownPlanIds } }] : []),
         ],
-        order: [["id", "DESC"]],
-        limit: 40,
-      })
-    : [];
+      };
+    }
+    recentLogs = await db.EmployeePlanLogs.findAll({
+      where: logWhere,
+      include: [
+        { model: db.Users, as: "actor", attributes: ["id", "names", "role"] },
+        { model: db.EmployeePlans, as: "plan", attributes: ["id", "title", "user_id"] },
+      ],
+      order: [["id", "DESC"]],
+      limit: canSeeAll ? 40 : 20,
+    });
+  }
 
   const plansByUser = new Map();
   let jointPlans = 0;
@@ -978,6 +1010,8 @@ export const getStaffMonitoring = asyncHandler(async (req, res) => {
   const jointRate = plans.length ? Math.round((jointPlans / plans.length) * 100) : 0;
 
   return ok(res, {
+    scope: canSeeAll ? "all" : "self",
+    can_see_all: canSeeAll,
     period: { start: periodStart, end: periodEnd },
     status_counts: statusCounts,
     collaboration: {
