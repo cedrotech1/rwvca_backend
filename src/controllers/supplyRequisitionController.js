@@ -29,14 +29,9 @@ function canManageSupply(user) {
   );
 }
 
+/** Kitchen/hygienic authorize: ED only. */
 function canAuthorizeSupply(user) {
-  return (
-    isEdRole(user) ||
-    isExecutiveRole(user) ||
-    isAdminRole(user) ||
-    userHasPrivilege(user, "supply.authorize") ||
-    (Array.isArray(user?.privilege_codes) && user.privilege_codes.includes("supply.authorize"))
-  );
+  return isEdRole(user);
 }
 
 function canAccess(user, row) {

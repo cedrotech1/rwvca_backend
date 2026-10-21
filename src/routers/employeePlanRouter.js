@@ -2,6 +2,7 @@ import express from "express";
 import {
   listPlans,
   getPlan,
+  listPlanLogs,
   createPlan,
   updatePlan,
   deletePlan,
@@ -26,6 +27,7 @@ router.post("/reports", createReport);
 
 router.get("/", listPlans);
 router.post("/", createPlan);
+router.get("/:id/logs", listPlanLogs);
 router.get("/:id", getPlan);
 router.put("/:id", updatePlan);
 router.delete("/:id", deletePlan);
