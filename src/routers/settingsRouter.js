@@ -1,5 +1,5 @@
 import express from "express";
-import { getSystemSettings, updateSystemSettings, sendTestEmail, exportDatabase } from "../controllers/settingsController.js";
+import { getSystemSettings, updateSystemSettings, sendTestEmail, exportDatabase, exportUploads } from "../controllers/settingsController.js";
 import { protect } from "../middlewares/protect.js";
 import { requireAdmin } from "../middlewares/roleAccess.js";
 
@@ -9,5 +9,6 @@ router.get("/", protect, getSystemSettings);
 router.put("/", protect, requireAdmin, updateSystemSettings);
 router.post("/test-email", protect, requireAdmin, sendTestEmail);
 router.get("/export-database", protect, requireAdmin, exportDatabase);
+router.get("/export-uploads", protect, requireAdmin, exportUploads);
 
 export default router;

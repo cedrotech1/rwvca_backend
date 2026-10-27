@@ -6,6 +6,7 @@ import { isAdminRole } from "../utils/roleHelpers.js";
 import Email from "../utils/mailer.js";
 import db from "../database/models/index.js";
 import { sendDatabaseDump } from "../services/databaseExport.js";
+import { sendUploadsZip } from "../services/uploadsExport.js";
 
 export const getSystemSettings = asyncHandler(async (req, res) => {
   const settings = await getSettings();
@@ -91,6 +92,19 @@ export const exportDatabase = asyncHandler(async (req, res) => {
     await createLog(req.user.id, "export_database", `Exported database to ${filename}`);
   } catch (error) {
     if (!res.headersSent) return fail(res, error.message || "Could not export database", 500);
+    if (!res.writableEnded) res.end();
+  }
+});
+
+export const exportUploads = asyncHandler(async (req, res) => {
+  if (!isAdminRole(req.user)) return fail(res, "Access denied", 403);
+  const stamp = new Date().toISOString().slice(0, 10);
+  const filename = `rwvca-uploads-${stamp}.zip`;
+  try {
+    await sendUploadsZip(res, filename);
+    await createLog(req.user.id, "export_uploads", `Exported uploads folder to ${filename}`);
+  } catch (error) {
+    if (!res.headersSent) return fail(res, error.message || "Could not export uploads", 500);
     if (!res.writableEnded) res.end();
   }
 });
