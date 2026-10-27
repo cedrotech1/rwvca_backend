@@ -555,7 +555,7 @@ export const adminResetPassword = asyncHandler(async (req, res) => {
           message:
             "An administrator set a new password for your RWVCA portal account. Use the password below to sign in, then change it from Profile settings.",
         },
-        `${process.env.FRONTEND_URL || "https://rwvca-frontend.vercel.app"}/login`
+        `${process.env.FRONTEND_URL || "https://rwvca-frontend1.vercel.app"}/login`
       );
       mailer.setEmailPayload({
         intro: "An administrator set a new password for your RWVCA portal account.",

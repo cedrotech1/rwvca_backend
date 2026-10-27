@@ -4,11 +4,40 @@ const rateLimit = require('express-rate-limit');
 const hpp = require('hpp');
 const { URL } = require('url');
 
+/** Always allow current RWVCA frontends even if Render env is stale. */
+const BUILTIN_FRONTEND_ORIGINS = [
+  'https://rwvca-frontend.vercel.app',
+  'https://rwvca-frontend1.vercel.app',
+  'https://rwvca.org.rw',
+  'https://www.rwvca.org.rw',
+];
+
 function parseAllowedOrigins() {
-  return (process.env.CORS_ORIGINS || 'http://localhost,http://127.0.0.1')
+  const fromEnv = (process.env.CORS_ORIGINS || 'http://localhost,http://127.0.0.1')
     .split(',')
     .map((o) => o.trim())
     .filter(Boolean);
+  const fromFrontendUrl = String(process.env.FRONTEND_URL || '')
+    .split(',')
+    .map((o) => o.trim().replace(/\/$/, ''))
+    .filter(Boolean);
+  return [...new Set([...fromEnv, ...fromFrontendUrl, ...BUILTIN_FRONTEND_ORIGINS])];
+}
+
+function isRwvcaVercelOrigin(origin) {
+  try {
+    const { hostname, protocol } = new URL(origin);
+    if (protocol !== 'https:') return false;
+    // https://rwvca-frontend.vercel.app and https://rwvca-frontend1.vercel.app (+ previews)
+    return (
+      hostname === 'rwvca-frontend.vercel.app' ||
+      hostname === 'rwvca-frontend1.vercel.app' ||
+      /^rwvca-frontend(-[\w-]+)?\.vercel\.app$/i.test(hostname) ||
+      /^rwvca-frontend1(-[\w-]+)?\.vercel\.app$/i.test(hostname)
+    );
+  } catch {
+    return false;
+  }
 }
 
 function normalizeHost(host) {
@@ -68,6 +97,10 @@ function isSameHostOrigin(origin, req) {
 
 function isOriginAllowed(origin, req) {
   if (!origin) return true;
+
+  if (isRwvcaVercelOrigin(origin)) {
+    return true;
+  }
 
   const allowedOrigins = parseAllowedOrigins();
   if (allowedOrigins.some((allowed) => originMatchesAllowed(origin, allowed))) {
