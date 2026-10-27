@@ -7,6 +7,7 @@ import Email from "../utils/mailer.js";
 import db from "../database/models/index.js";
 import { sendDatabaseDump } from "../services/databaseExport.js";
 import { sendUploadsZip } from "../services/uploadsExport.js";
+import { getUploadsIntegrityReport } from "../services/uploadsIntegrity.js";
 
 export const getSystemSettings = asyncHandler(async (req, res) => {
   const settings = await getSettings();
@@ -107,4 +108,10 @@ export const exportUploads = asyncHandler(async (req, res) => {
     if (!res.headersSent) return fail(res, error.message || "Could not export uploads", 500);
     if (!res.writableEnded) res.end();
   }
+});
+
+export const uploadsIntegrity = asyncHandler(async (req, res) => {
+  if (!isAdminRole(req.user)) return fail(res, "Access denied", 403);
+  const report = await getUploadsIntegrityReport(db);
+  return ok(res, report, "Uploads integrity report");
 });

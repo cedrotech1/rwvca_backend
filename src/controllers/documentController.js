@@ -11,6 +11,7 @@ import { buildEmailPayload } from "../services/emailNotificationHelpers.js";
 import { requireNotificationPriority } from "../utils/notificationPriority.js";
 import { isAdminRole, isEdRole } from "../utils/roleHelpers.js";
 import fileStorage from "../utils/fileStorage.js";
+import { fileExistsOnDisk } from "../services/uploadsIntegrity.js";
 const { saveRequestFile, resolveUploadFilePath } = fileStorage;
 
 const ALLOWED_FILE_TYPES = ["pdf", "docx", "xlsx", "doc", "xls", "word", "excel"];
@@ -98,6 +99,7 @@ function decorateDocument(row, user) {
     .sort((a, b) => new Date(b.shared_at || 0) - new Date(a.shared_at || 0));
   const comments = json.document_comments_document_id || [];
   const myShare = shares.find((share) => Number(share.shared_to) === Number(user.id));
+  const fileExists = fileExistsOnDisk(json.file_path);
   return {
     ...json,
     creator_name: json.creator?.names,
@@ -110,7 +112,9 @@ function decorateDocument(row, user) {
     can_share: canShareDocument(user, json),
     can_toggle_status: isEdRole(user.role),
     can_delete: Number(json.created_by) === Number(user.id),
-    can_download: canDownloadDocument(user, json),
+    can_download: canDownloadDocument(user, json) && fileExists,
+    file_exists: fileExists,
+    file_missing: !fileExists,
     is_open: json.status === "open",
   };
 }
