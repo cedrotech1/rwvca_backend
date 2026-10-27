@@ -1,4 +1,4 @@
-import archiver from "archiver";
+import { ZipArchive } from "archiver";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -14,6 +14,8 @@ function stampName() {
 /**
  * Zip the entire uploads/ folder to a temp file, then stream it with Content-Length
  * so the admin UI can show download progress percentage.
+ *
+ * Uses archiver@8 ZipArchive (no default archiver() factory in v8).
  */
 export async function sendUploadsZip(res, filename = stampName()) {
   const uploadsRoot = backendUploadsRoot();
@@ -26,29 +28,41 @@ export async function sendUploadsZip(res, filename = stampName()) {
     `rwvca-uploads-export-${Date.now()}-${Math.random().toString(36).slice(2)}.zip`
   );
 
-  await new Promise((resolve, reject) => {
-    const output = fs.createWriteStream(tmpPath);
-    const archive = archiver("zip", { zlib: { level: 6 } });
+  try {
+    await new Promise((resolve, reject) => {
+      const output = fs.createWriteStream(tmpPath);
+      const archive = new ZipArchive({ zlib: { level: 6 } });
 
-    output.on("close", resolve);
-    output.on("error", reject);
-    archive.on("error", reject);
-    archive.on("warning", (err) => {
-      if (err.code !== "ENOENT") reject(err);
+      let settled = false;
+      const fail = (err) => {
+        if (settled) return;
+        settled = true;
+        reject(err instanceof Error ? err : new Error(String(err)));
+      };
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+
+      output.on("close", done);
+      output.on("error", fail);
+      archive.on("error", fail);
+      archive.on("warning", (err) => {
+        if (err && err.code !== "ENOENT") fail(err);
+      });
+
+      archive.pipe(output);
+      archive.directory(uploadsRoot, "uploads");
+      archive.finalize().catch(fail);
     });
 
-    archive.pipe(output);
-    archive.directory(uploadsRoot, "uploads");
-    archive.finalize();
-  });
+    const stat = fs.statSync(tmpPath);
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Content-Length", String(stat.size));
+    res.setHeader("Cache-Control", "no-store");
 
-  const stat = fs.statSync(tmpPath);
-  res.setHeader("Content-Type", "application/zip");
-  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-  res.setHeader("Content-Length", String(stat.size));
-  res.setHeader("Cache-Control", "no-store");
-
-  try {
     await pipeline(fs.createReadStream(tmpPath), res);
   } finally {
     fs.unlink(tmpPath, () => {});
